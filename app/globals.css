@@ -1,0 +1,233 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Custom Colors for Tailwind 4 */
+  --color-wood-primary: var(--wood-primary);
+  --color-wood-secondary: var(--wood-secondary);
+  --color-accent-color: var(--accent-color);
+  --color-accent-glow: var(--accent-glow);
+}
+
+:root {
+  --bg-main: #0a0a0b;
+  --tactical-bg: #1e1e20;
+  --tactical-border: #2a2a2c;
+  --tactical-orange: #ff8c00;
+  --tactical-orange-glow: rgba(255, 140, 0, 0.4);
+  --lcd-bg: #1c1300;
+  --lcd-text: #ffaa00;
+}
+
+body {
+  background-color: var(--bg-main);
+  background-image:
+    radial-gradient(circle at 50% 50%, #1a1a1c 0%, #0a0a0b 100%),
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 100% 100%, 20px 20px, 20px 20px;
+  color: white;
+  margin: 0;
+  overflow-x: hidden;
+  min-height: 100vh;
+  font-family: var(--font-mono);
+}
+
+/* Tactical Body */
+.tactical-chassis {
+  background: linear-gradient(145deg, #232325, #1d1d1f);
+  box-shadow:
+    10px 10px 30px #050506,
+    -5px -5px 15px rgba(255, 255, 255, 0.02),
+    inset 0 0 10px rgba(0, 0, 0, 0.5);
+  border: 1px solid #2a2a2c;
+  position: relative;
+  overflow: hidden;
+}
+
+.tactical-chassis::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url("https://www.transparenttextures.com/patterns/carbon-fibre.png");
+  opacity: 0.1;
+  pointer-events: none;
+}
+
+/* Amber LCD Screen */
+.tactical-screen {
+  background: var(--lcd-bg);
+  border: 4px solid #111;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.9);
+  position: relative;
+  overflow: hidden;
+}
+
+.tactical-screen::before {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  z-index: 2;
+  background-size: 100% 2px, 3px 100%;
+  pointer-events: none;
+}
+
+.screen-text {
+  color: var(--lcd-text);
+  text-shadow: 0 0 8px var(--tactical-orange-glow);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: -1px;
+}
+
+/* Industrial Components */
+.tactical-knob {
+  width: 40px;
+  height: 40px;
+  background: conic-gradient(#333, #111, #333, #111, #333);
+  border-radius: 50%;
+  border: 2px solid #222;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+
+.tactical-knob::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 2px;
+  height: 8px;
+  background: var(--tactical-orange);
+  transform: translateX(-50%);
+}
+
+.screw {
+  width: 8px;
+  height: 8px;
+  background: radial-gradient(circle at 30% 30%, #444, #111);
+  border-radius: 50%;
+  box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.vent-line {
+  height: 2px;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 4px;
+}
+
+.tactical-label {
+  font-size: 8px;
+  font-weight: 900;
+  color: var(--tactical-orange);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.8;
+}
+
+.branding-text {
+  font-family: 'Inter', sans-serif;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: var(--tactical-orange);
+  text-transform: uppercase;
+}
+
+.branding-sub {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+/* PTT Button */
+.ptt-outer {
+  background: #111;
+  padding: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.8);
+}
+
+.ptt-inner {
+  background: radial-gradient(circle at 50% 40%, #cc0000, #880000);
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 4px solid #222;
+  box-shadow: 0 6px 0 #550000;
+  transition: all 0.1s;
+}
+
+.ptt-inner:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #330000;
+}
+
+/* Industrial Toggle Switch */
+.tactical-toggle {
+  width: 24px;
+  height: 48px;
+  background: #0a0a0b;
+  border-radius: 6px;
+  border: 2px solid #222;
+  position: relative;
+  box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.9);
+}
+
+.toggle-lever {
+  width: 14px;
+  height: 14px;
+  background: radial-gradient(circle, #666, #111);
+  border-radius: 3px;
+  position: absolute;
+  left: 3px;
+  top: 6px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.8);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tactical-toggle:active .toggle-lever {
+  top: 26px;
+}
+
+/* Status LEDs */
+.status-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #111;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.9);
+}
+
+.led-orange {
+  background: #ff8c00;
+  box-shadow: 0 0 10px var(--tactical-orange-glow);
+}
+
+.led-green {
+  background: #00ff00;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+.led-blink {
+  animation: tactical-blink 1.5s infinite steps(2);
+}
+
+@keyframes tactical-blink {
+  from {
+    opacity: 0.2;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
