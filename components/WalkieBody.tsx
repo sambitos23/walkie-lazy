@@ -25,7 +25,7 @@ export default function WalkieBody() {
     const [showBrowserRedirect, setShowBrowserRedirect] = useState(false);
     const [pendingRemoteToken, setPendingRemoteToken] = useState<string | null>(null);
 
-    const { startTalking, stopTalking, sendPing, clearSignal, audioRef, fcmToken, setFcmToken, isIncomingCall } = useWalkieTalkie(myId, targetId, targetFcmToken);
+    const { startTalking, stopTalking, sendPing, clearSignal, audioRef, fcmToken, setFcmToken, isIncomingCall, peerConnected } = useWalkieTalkie(myId, targetId, targetFcmToken);
 
     React.useEffect(() => {
         setMounted(true);
@@ -677,8 +677,8 @@ export default function WalkieBody() {
                     <div className="mt-8 flex flex-col items-center">
                         <RedButton
                             isTalking={isTalking}
-                            isConnected={connectionStatus === 'connected'}
-                            isConnecting={connectionStatus === 'connecting'}
+                            isConnected={peerConnected && !!targetId}
+                            isConnecting={!peerConnected && !!myId}
                             isTokenValid={tokenValidation === 'valid'}
                             onTalkStart={handleTalkStart}
                             onTalkEnd={handleTalkEnd}

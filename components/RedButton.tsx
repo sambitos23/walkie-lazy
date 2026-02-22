@@ -31,7 +31,7 @@ const RedButton: React.FC<RedButtonProps> = ({
     targetFcmToken,
 }) => {
     const handleMouseDown = () => {
-        if (isConnected && isTokenValid) {
+        if (isConnected) {
             onTalkStart();
         }
     };
@@ -72,11 +72,11 @@ const RedButton: React.FC<RedButtonProps> = ({
                         onTouchStart={handleTouchStart}
                         onTouchEnd={handleTouchEnd}
                         className={`ptt-inner flex items-center justify-center transition-all duration-75 relative z-10 
-                            ${!isConnected || !isTokenValid ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer active:scale-95'}
+                            ${!isConnected ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer active:scale-95'}
                             ${isTalking ? 'brightness-125 scale-95 shadow-inner' : ''}
                             ${isIncomingCall ? 'ring-4 ring-green-500/50 animate-bounce' : ''}
                         `}
-                        disabled={!isConnected || !isTokenValid}
+                        disabled={!isConnected}
                     >
                         {isTalking ? (
                             <Mic size={32} className="text-white animate-pulse" />
