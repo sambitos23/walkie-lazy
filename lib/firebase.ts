@@ -105,16 +105,26 @@ export const requestForToken = async (): Promise<string | null> => {
         try {
             // Check for basic support items
             if (!("Notification" in window)) {
-                console.warn("This browser does not support desktop notification");
+                console.warn("❌ This browser does not support notifications");
                 return null;
             }
 
             if (!("serviceWorker" in navigator)) {
-                console.warn("Service Workers are not supported in this browser");
+                console.warn("❌ Service Workers are not supported in this browser");
                 return null;
             }
 
-            // Check if Brave is blocking push (Brave doesn't expose GCM/FCM by default)
+            // Detect iOS Safari
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            const isStandalone = (window.matchMedia('(display-mode: standalone)').matches) || (window.navigator as any).standalone === true;
+
+            if (isIOS && !isStandalone) {
+                console.warn("📱 iOS detected but app is NOT installed to Home Screen. Web Push requires PWA on iOS.");
+                console.warn("To fix: Tap Share → Add to Home Screen, then reopen the app.");
+                return null;
+            }
+
+            // Check if Brave is blocking push
             if ((navigator as any).brave && await (navigator as any).brave.isBrave()) {
                 console.warn("Brave Browser detected. Ensure 'Google Services for Push Messaging' is enabled in brave://settings/privacy");
             }
@@ -124,17 +134,20 @@ export const requestForToken = async (): Promise<string | null> => {
                 console.log("Requesting notification permission...");
                 const permission = await Notification.requestPermission();
                 if (permission !== "granted") {
-                    console.warn("Notification permission denied by user");
+                    console.warn("❌ Notification permission denied by user");
                     return null;
                 }
             } else if (Notification.permission === "denied") {
-                console.warn("Notification permission is blocked. Please enable it in browser settings.");
+                console.warn("❌ Notification permission is blocked. Please enable it in browser settings.");
                 return null;
             }
 
             const msg = await messaging();
             if (!msg) {
-                console.error("Firebase Messaging not supported in this browser environment");
+                console.error("❌ Firebase Messaging not supported in this browser. isSupported() returned false.");
+                if (isIOS) {
+                    console.error("📱 iOS Safari requires: 1) iOS 16.4+  2) App added to Home Screen  3) Notification permission granted from Home Screen app.");
+                }
                 return null;
             }
 

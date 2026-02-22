@@ -51,7 +51,16 @@ export default function WalkieBody() {
                 setExchangeStatus('success');
                 setTimeout(() => setExchangeStatus('idle'), 3000);
             } else {
-                setTokenError('NOT SUPPORTED IN PRIVATE MODE');
+                // Detect iOS to show a more helpful error
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+                const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+                if (isIOS && !isStandalone) {
+                    setTokenError('iOS: ADD TO HOME SCREEN FIRST (Share → Add to Home Screen)');
+                } else if (isIOS) {
+                    setTokenError('iOS: REQUIRES iOS 16.4+ & NOTIFICATION PERMISSION');
+                } else {
+                    setTokenError('TOKEN GENERATION FAILED (Private/Incognito mode?)');
+                }
                 setExchangeStatus('failed');
                 setTimeout(() => setExchangeStatus('idle'), 3000);
             }
@@ -62,6 +71,26 @@ export default function WalkieBody() {
             setTimeout(() => setExchangeStatus('idle'), 3000);
         }
     };
+
+    // Read remote token from URL query parameters (for QR code scanning)
+    React.useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const params = new URLSearchParams(window.location.search);
+        const scannedToken = params.get('token');
+        if (scannedToken && scannedToken.length > 20) {
+            setRemoteToken(scannedToken);
+            setTargetFcmToken(scannedToken);
+            setConnectionStatus('connecting');
+            setExchangeStatus('scanning');
+            // Clean up URL without reloading
+            window.history.replaceState({}, '', window.location.pathname);
+            setTimeout(() => {
+                setConnectionStatus('connected');
+                setExchangeStatus('success');
+                setTimeout(() => setExchangeStatus('idle'), 3000);
+            }, 1500);
+        }
+    }, []);
 
     if (!mounted) return null;
 
@@ -222,21 +251,34 @@ export default function WalkieBody() {
                                 </div>
                             </div>
 
-                            {/* QR CODE SCANNER */}
+                            {/* QR CODE FOR TOKEN EXCHANGE */}
                             <div className="bg-[#0a0a0b] p-4 rounded-lg border border-white/5">
                                 <h4 className="text-[#ff8c00] font-black mb-2">SCAN QR CODE</h4>
                                 <div className="text-center">
-                                    <QrCode
-                                        value={fcmToken || 'WALKIE-TALKIE'}
-                                        size={200}
-                                        bgColor="#111"
-                                        fgColor="#ff8c00"
-                                        level="L"
-                                        className="mx-auto mb-3"
-                                    />
-                                    <p className="text-[9px] text-white/60 font-mono">
-                                        SCAN TO EXCHANGE TOKENS
-                                    </p>
+                                    {fcmToken ? (
+                                        <>
+                                            <QrCode
+                                                value={`${typeof window !== 'undefined' ? window.location.origin : 'https://walkie-lazy.vercel.app'}/?token=${encodeURIComponent(fcmToken)}`}
+                                                size={200}
+                                                bgColor="#111"
+                                                fgColor="#ff8c00"
+                                                level="L"
+                                                className="mx-auto mb-3"
+                                            />
+                                            <p className="text-[9px] text-green-500 font-mono">
+                                                ✅ SCAN THIS ON ANOTHER DEVICE TO CONNECT
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="w-[200px] h-[200px] mx-auto mb-3 bg-[#222] rounded-lg flex items-center justify-center border border-white/10">
+                                                <p className="text-white/30 text-xs font-black uppercase">NO TOKEN YET</p>
+                                            </div>
+                                            <p className="text-[9px] text-red-500 font-mono">
+                                                ❌ GENERATE TOKEN FIRST (CLICK REFRESH TOKEN)
+                                            </p>
+                                        </>
+                                    )}
                                 </div>
                             </div>
 
