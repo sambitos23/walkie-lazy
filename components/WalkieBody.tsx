@@ -1,9 +1,11 @@
 // src/components/WalkieBody.tsx
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useWalkieTalkie } from '@/hooks/useWalkieTalkie';
-import { requestForToken } from '@/lib/firebase';
-import { Signal, BatteryFull, Radio, Zap, Volume2 } from 'lucide-react';
+import { requestForToken, saveTokenToStorage, getTokenFromStorage, validateToken, updateToken } from '@/lib/firebase';
+import { Signal, BatteryFull, Radio, Zap, Volume2, QrCode as QrCodeIcon, Link2, Check, X, RefreshCw, Wifi, AlertCircle, Loader2, TrendingUp, TrendingDown } from 'lucide-react';
+import { QRCodeSVG as QrCode } from 'qrcode.react';
+import RedButton from './RedButton';
 
 export default function WalkieBody() {
     const [myId, setMyId] = useState('');
@@ -12,26 +14,106 @@ export default function WalkieBody() {
     const [mounted, setMounted] = useState(false);
     const [qrPattern, setQrPattern] = useState<boolean[]>([]);
     const [isTalking, setIsTalking] = useState(false);
+    const [isTokenExchangeActive, setIsTokenExchangeActive] = useState(false);
+    const [remoteToken, setRemoteToken] = useState<string | null>(null);
+    const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+    const [exchangeStatus, setExchangeStatus] = useState<'idle' | 'scanning' | 'exchanging' | 'success' | 'failed'>('idle');
+    const [tokenValidation, setTokenValidation] = useState<'valid' | 'invalid' | 'unknown'>('unknown');
+    const [autoExchangeEnabled, setAutoExchangeEnabled] = useState(true);
+    const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
-    const { startTalking, stopTalking, sendPing, clearSignal, audioRef, fcmToken, isIncomingCall } = useWalkieTalkie(myId, targetId, targetFcmToken);
+    const { startTalking, stopTalking, sendPing, clearSignal, audioRef, fcmToken, setFcmToken, isIncomingCall } = useWalkieTalkie(myId, targetId, targetFcmToken);
 
     React.useEffect(() => {
         setMounted(true);
         setQrPattern([...Array(9)].map(() => Math.random() > 0.5));
+
+        // Initialize token from storage
+        const storedToken = getTokenFromStorage();
+        if (storedToken) {
+            setFcmToken(storedToken);
+            validateToken(storedToken).then(isValid => {
+                setTokenValidation(isValid ? 'valid' : 'invalid');
+            });
+        }
     }, []);
 
     const handleSync = async () => {
         try {
             const token = await requestForToken();
             if (token) {
-                window.location.reload();
+                setFcmToken(token);
+                setTokenValidation('valid');
+                saveTokenToStorage(token);
+                setExchangeStatus('success');
+                setTimeout(() => setExchangeStatus('idle'), 3000);
             }
         } catch (e) {
             console.error("Sync failed", e);
+            setExchangeStatus('failed');
+            setTimeout(() => setExchangeStatus('idle'), 3000);
         }
     };
 
     if (!mounted) return null;
+
+    const handleTokenExchange = async () => {
+        if (!remoteToken) {
+            setExchangeStatus('failed');
+            return;
+        }
+
+        try {
+            setExchangeStatus('exchanging');
+            const isValid = await validateToken(remoteToken);
+
+            if (isValid) {
+                await updateToken(remoteToken);
+                setFcmToken(remoteToken);
+                setTokenValidation('valid');
+                setExchangeStatus('success');
+
+                // Auto-connect if enabled
+                if (autoExchangeEnabled && targetId) {
+                    setConnectionStatus('connecting');
+                    setTimeout(() => setConnectionStatus('connected'), 1500);
+                }
+            } else {
+                setExchangeStatus('failed');
+            }
+        } catch (error) {
+            console.error('Token exchange failed:', error);
+            setExchangeStatus('failed');
+        } finally {
+            setTimeout(() => setExchangeStatus('idle'), 3000);
+        }
+    };
+
+    const handleScanToken = (scannedToken: string) => {
+        setRemoteToken(scannedToken);
+        setExchangeStatus('scanning');
+
+        // Auto-exchange if enabled
+        if (autoExchangeEnabled) {
+            handleTokenExchange();
+        }
+    };
+
+    const handleDisconnect = () => {
+        setRemoteToken(null);
+        setConnectionStatus('disconnected');
+        setExchangeStatus('idle');
+        setTargetId('');
+        setTargetFcmToken('');
+    };
+
+    const handleCopyToken = () => {
+        if (fcmToken) {
+            navigator.clipboard.writeText(fcmToken);
+            setExchangeStatus('success');
+            setTimeout(() => setExchangeStatus('idle'), 3000);
+        }
+    };
 
     const handleTalkStart = () => {
         clearSignal();
@@ -47,6 +129,154 @@ export default function WalkieBody() {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen py-10 px-4 select-none">
             <audio ref={audioRef} autoPlay playsInline className="pointer-events-none invisible absolute" />
+
+            {/* TOKEN EXCHANGE OVERLAY */}
+            {isTokenExchangeActive && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-lg flex items-center justify-center z-50">
+                    <div className="bg-[#111] rounded-2xl p-6 w-full max-w-2xl border border-white/5">
+                        <div className="flex justify-between items-start mb-4">
+                            <h3 className="text-white text-xl font-black uppercase tracking-wider">TOKEN EXCHANGE</h3>
+                            <button
+                                onClick={() => setIsTokenExchangeActive(false)}
+                                className="text-[#ff8c00] hover:text-white transition-colors"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-6">
+                            {/* MY TOKEN */}
+                            <div className="bg-[#0a0a0b] p-4 rounded-lg border border-white/5">
+                                <h4 className="text-[#ff8c00] font-black mb-2">MY TOKEN</h4>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex-1">
+                                        <p className="text-[10px] text-white/80 font-mono break-all bg-[#222] p-3 rounded">
+                                            {fcmToken || 'GENERATING...'}
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={handleCopyToken}
+                                        className={`px-3 py-1 rounded-lg text-xs font-black uppercase transition-all ${exchangeStatus === 'success'
+                                            ? 'bg-green-500 text-black'
+                                            : 'bg-[#ff8c00] text-black hover:bg-[#ff6300]'
+                                            }`}
+                                    >
+                                        {exchangeStatus === 'success' ? 'COPIED!' : 'COPY'}
+                                    </button>
+                                </div>
+                                <div className="mt-3 flex gap-2">
+                                    <button
+                                        onClick={handleSync}
+                                        className={`flex-1 px-3 py-2 rounded-lg text-xs font-black uppercase transition-all ${exchangeStatus === 'exchanging'
+                                            ? 'bg-[#666] cursor-not-allowed'
+                                            : 'bg-[#ff8c00] text-black hover:bg-[#ff6300]'
+                                            }`}
+                                        disabled={exchangeStatus === 'exchanging'}
+                                    >
+                                        {exchangeStatus === 'exchanging' ? 'GENERATING...' : 'REFRESH TOKEN'}
+                                    </button>
+                                    <button
+                                        onClick={handleDisconnect}
+                                        className="flex-1 px-3 py-2 rounded-lg text-xs font-black uppercase bg-[#ff4444] text-black hover:bg-[#ff2222]"
+                                    >
+                                        DISCONNECT
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* REMOTE TOKEN */}
+                            <div className="bg-[#0a0a0b] p-4 rounded-lg border border-white/5">
+                                <h4 className="text-[#ff8c00] font-black mb-2">REMOTE TOKEN</h4>
+                                <div className="space-y-3">
+                                    <div className="relative">
+                                        <input
+                                            value={remoteToken || ''}
+                                            onChange={(e) => setRemoteToken(e.target.value)}
+                                            placeholder="PASTE REMOTE TOKEN"
+                                            className="w-full bg-black/60 border border-[#333] p-3 rounded-lg text-[10px] text-white focus:border-[#ff8c00] outline-none transition-all font-mono"
+                                        />
+                                        {exchangeStatus === 'scanning' && (
+                                            <div className="absolute top-0 right-0 h-full flex items-center px-3 text-[#ff8c00]">
+                                                <Loader2 size={20} className="animate-spin" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={handleTokenExchange}
+                                        className={`w-full px-3 py-2 rounded-lg text-xs font-black uppercase transition-all ${exchangeStatus === 'exchanging'
+                                            ? 'bg-[#666] cursor-not-allowed'
+                                            : 'bg-[#ff8c00] text-black hover:bg-[#ff6300]'
+                                            }`}
+                                        disabled={exchangeStatus === 'exchanging'}
+                                    >
+                                        {exchangeStatus === 'exchanging' ? 'EXCHANGING...' : 'EXCHANGE TOKEN'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* QR CODE SCANNER */}
+                            <div className="bg-[#0a0a0b] p-4 rounded-lg border border-white/5">
+                                <h4 className="text-[#ff8c00] font-black mb-2">SCAN QR CODE</h4>
+                                <div className="text-center">
+                                    <QrCode
+                                        value={fcmToken || 'WALKIE-TALKIE'}
+                                        size={200}
+                                        bgColor="#111"
+                                        fgColor="#ff8c00"
+                                        level="L"
+                                        className="mx-auto mb-3"
+                                    />
+                                    <p className="text-[9px] text-white/60 font-mono">
+                                        SCAN TO EXCHANGE TOKENS
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* CONNECTION STATUS */}
+                            <div className="bg-[#0a0a0b] p-4 rounded-lg border border-white/5">
+                                <h4 className="text-[#ff8c00] font-black mb-2">CONNECTION STATUS</h4>
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-white/80">STATUS</span>
+                                        <div className="flex items-center gap-2">
+                                            {connectionStatus === 'disconnected' && (
+                                                <div className="w-3 h-3 bg-[#ff4444] rounded-full animate-pulse" />
+                                            )}
+                                            {connectionStatus === 'connecting' && (
+                                                <div className="w-3 h-3 bg-[#ff8c00] rounded-full animate-bounce" />
+                                            )}
+                                            {connectionStatus === 'connected' && (
+                                                <div className="w-3 h-3 bg-green-500 rounded-full" />
+                                            )}
+                                            <span className={`text-[10px] ${connectionStatus === 'connected' ? 'text-green-500' : 'text-white/60'}`}>
+                                                {connectionStatus.toUpperCase()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-white/80">TOKEN VALID</span>
+                                        <span className={`text-[10px] ${tokenValidation === 'valid' ? 'text-green-500' : tokenValidation === 'invalid' ? 'text-[#ff4444]' : 'text-white/60'}`}>
+                                            {tokenValidation.toUpperCase()}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-white/80">AUTO-EXCHANGE</span>
+                                        <button
+                                            onClick={() => setAutoExchangeEnabled(!autoExchangeEnabled)}
+                                            className={`px-2 py-1 rounded text-[10px] font-black uppercase transition-all ${autoExchangeEnabled
+                                                ? 'bg-green-500 text-black hover:bg-green-400'
+                                                : 'bg-[#666] text-white/60 hover:bg-[#444]'
+                                                }`}
+                                        >
+                                            {autoExchangeEnabled ? 'ON' : 'OFF'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* TOP CONFIGURATION PANEL */}
             <div className="mb-12 w-full max-w-sm space-y-4 bg-black/40 p-6 rounded-2xl border border-white/5 backdrop-blur-xl shadow-2xl">
@@ -79,6 +309,46 @@ export default function WalkieBody() {
                         className="w-full bg-black/60 border border-[#333] p-3 rounded-lg text-[10px] text-white focus:border-[#ff8c00] outline-none transition-all font-mono"
                     />
                 </div>
+                <div className="flex items-center justify-between">
+                    <label className="tactical-label text-white/50">ADVANCED SETTINGS</label>
+                    <button
+                        onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                        className="text-[#ff8c00] hover:text-white transition-colors"
+                    >
+                        <div className={`w-3 h-3 rounded-full ${showAdvancedSettings ? 'bg-green-500' : 'bg-[#666]'}`} />
+                    </button>
+                </div>
+                {showAdvancedSettings && (
+                    <div className="bg-[#0a0a0b] p-4 rounded-lg border border-white/5">
+                        <h4 className="text-[#ff8c00] font-black mb-2">ADVANCED SETTINGS</h4>
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] text-white/80">AUTO-EXCHANGE</span>
+                                <button
+                                    onClick={() => setAutoExchangeEnabled(!autoExchangeEnabled)}
+                                    className={`px-3 py-1 rounded text-xs font-black uppercase transition-all ${autoExchangeEnabled
+                                        ? 'bg-green-500 text-black hover:bg-green-400'
+                                        : 'bg-[#666] text-white/60 hover:bg-[#444]'
+                                        }`}
+                                >
+                                    {autoExchangeEnabled ? 'ENABLED' : 'DISABLED'}
+                                </button>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] text-white/80">TOKEN VALID</span>
+                                <span className={`text-[10px] ${tokenValidation === 'valid' ? 'text-green-500' : tokenValidation === 'invalid' ? 'text-[#ff4444]' : 'text-white/60'}`}>
+                                    {tokenValidation.toUpperCase()}
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => setIsTokenExchangeActive(true)}
+                                className="w-full px-3 py-2 rounded-lg text-xs font-black uppercase bg-[#ff8c00] text-black hover:bg-[#ff6300]"
+                            >
+                                OPEN TOKEN EXCHANGE
+                            </button>
+                        </div>
+                    </div>
+                )}
                 {fcmToken && (
                     <div className="bg-[#ff8c00]/5 border border-[#ff8c00]/20 p-3 rounded-lg">
                         <span className="tactical-label block mb-1 text-green-500!">MY_BROADCAST_TOKEN:</span>
@@ -124,7 +394,7 @@ export default function WalkieBody() {
                 </div>
 
                 {/* MAIN CHASSIS */}
-                <div className="tactical-chassis p-8 w-[340px] h-[620px] rounded-[4rem] flex flex-col items-center border-t-[#333] border-l-[#333] border-b-black border-r-black shadow-2xl">
+                <div className="tactical-chassis p-8 w-[340px] h-full rounded-[4rem] flex flex-col items-center border-t-[#333] border-l-[#333] border-b-black border-r-black shadow-2xl">
 
                     {/* HARDWARE SCREWS */}
                     <div className="absolute top-8 left-8 screw" />
@@ -149,6 +419,19 @@ export default function WalkieBody() {
                             <div className="flex flex-col gap-1.5 items-center">
                                 <div className={`status-led ${isIncomingCall ? 'led-green led-blink' : 'led-green opacity-30'}`} />
                                 <span className="tactical-label text-[5px]!">RX</span>
+                            </div>
+                            {/* TOKEN CONNECTION INDICATOR */}
+                            <div className="flex flex-col gap-1.5 items-center">
+                                {connectionStatus === 'disconnected' && (
+                                    <div className="status-led led-red" />
+                                )}
+                                {connectionStatus === 'connecting' && (
+                                    <div className="status-led led-orange led-blink" />
+                                )}
+                                {connectionStatus === 'connected' && (
+                                    <div className="status-led led-green" />
+                                )}
+                                <span className="tactical-label text-[5px]!">LINK</span>
                             </div>
                         </div>
                     </div>
@@ -225,24 +508,39 @@ export default function WalkieBody() {
                             >
                                 <Radio size={18} className="text-white/20 group-active:text-black" />
                             </button>
-                            <button className="w-10 h-10 rounded-sm bg-[#111] border border-[#222] shadow-xl" />
-                            <button className="w-10 h-10 rounded-sm bg-[#111] border border-[#222] shadow-xl" />
+                            <button
+                                onClick={() => setIsTokenExchangeActive(true)}
+                                className="w-10 h-10 rounded-sm bg-[#111] border border-[#222] shadow-xl flex items-center justify-center active:bg-[#ff8c00] active:text-black transition-all group"
+                                title="Token Exchange"
+                            >
+                                <Link2 size={18} className="text-white/20 group-active:text-black" />
+                            </button>
+                            <button
+                                onClick={handleDisconnect}
+                                className="w-10 h-10 rounded-sm bg-[#111] border border-[#222] shadow-xl flex items-center justify-center active:bg-[#ff4444] active:text-black transition-all group"
+                                title="Disconnect"
+                            >
+                                <X size={18} className="text-white/20 group-active:text-black" />
+                            </button>
                         </div>
                     </div>
 
-                    {/* COMM BUTTON */}
+                    {/* ENHANCED COMM BUTTON */}
                     <div className="mt-8 flex flex-col items-center">
-                        <div className="ptt-outer bg-linear-to-b from-[#111] to-black p-3 rounded-full shadow-2xl border border-white/5">
-                            <button
-                                onMouseDown={handleTalkStart}
-                                onMouseUp={handleTalkEnd}
-                                onTouchStart={handleTalkStart}
-                                onTouchEnd={handleTalkEnd}
-                                className="ptt-inner flex items-center justify-center active:scale-95 transition-all outline-none"
-                            >
-                                <span className="text-white/20 font-black text-[10px] tracking-[0.2em] uppercase">PUSH_COMM</span>
-                            </button>
-                        </div>
+                        <RedButton
+                            isTalking={isTalking}
+                            isConnected={connectionStatus === 'connected'}
+                            isConnecting={connectionStatus === 'connecting'}
+                            isTokenValid={tokenValidation === 'valid'}
+                            onTalkStart={handleTalkStart}
+                            onTalkEnd={handleTalkEnd}
+                            onSync={handleSync}
+                            onDisconnect={handleDisconnect}
+                            isIncomingCall={isIncomingCall}
+                            fcmToken={fcmToken}
+                            targetId={targetId}
+                            targetFcmToken={targetFcmToken}
+                        />
                     </div>
                 </div>
 

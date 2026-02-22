@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import { getMessaging, getToken, onMessage, deleteToken } from "firebase/messaging";
+import { useState, useEffect } from "react";
 
 const firebaseConfig = {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -22,8 +23,76 @@ export const messaging = async () => {
 };
 
 let tokenRequestPromise: Promise<string | null> | null = null;
+let tokenRenewalTimer: NodeJS.Timeout | null = null;
+let tokenValidationTimer: NodeJS.Timeout | null = null;
 
-export const requestForToken = async () => {
+// Token management configuration
+const TOKEN_STORAGE_KEY = "walkie_token";
+const TOKEN_EXPIRATION_GRACE_PERIOD = 5 * 60 * 1000; // 5 minutes before expiration
+const TOKEN_VALIDATION_INTERVAL = 5 * 60 * 1000; // Validate every 5 minutes
+const TOKEN_PERSISTENCE_ENABLED = true;
+
+// Encryption utilities (in production, use a secure key management system)
+const encryptionKey = "walkie-lazy-token-key";
+
+const encryptToken = (token: string): string => {
+    // Simple XOR encryption for demonstration (replace with proper encryption in production)
+    return token.split('').map((char, index) => {
+        return String.fromCharCode(char.charCodeAt(0) ^ encryptionKey.charCodeAt(index % encryptionKey.length));
+    }).join('');
+};
+
+const decryptToken = (encryptedToken: string): string => {
+    // XOR decryption (same as encryption for XOR)
+    return encryptedToken.split('').map((char, index) => {
+        return String.fromCharCode(char.charCodeAt(0) ^ encryptionKey.charCodeAt(index % encryptionKey.length));
+    }).join('');
+};
+
+export const saveTokenToStorage = (token: string | null) => {
+    if (TOKEN_PERSISTENCE_ENABLED && token) {
+        const encryptedToken = encryptToken(token);
+        localStorage.setItem(TOKEN_STORAGE_KEY, encryptedToken);
+        localStorage.setItem(`${TOKEN_STORAGE_KEY}_timestamp`, Date.now().toString());
+    } else {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        localStorage.removeItem(`${TOKEN_STORAGE_KEY}_timestamp`);
+    }
+};
+
+export const getTokenFromStorage = (): string | null => {
+    if (!TOKEN_PERSISTENCE_ENABLED) return null;
+
+    const encryptedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!encryptedToken) return null;
+
+    try {
+        return decryptToken(encryptedToken);
+    } catch (error) {
+        console.error("Failed to decrypt token from storage", error);
+        return null;
+    }
+};
+
+const isTokenExpired = (token: string): boolean => {
+    // In a real implementation, you would parse the JWT and check the exp claim
+    // For now, we'll use a simple timestamp-based expiration
+    const savedAt = localStorage.getItem(`${TOKEN_STORAGE_KEY}_timestamp`);
+    if (!savedAt) return true;
+
+    const tokenAge = Date.now() - parseInt(savedAt);
+    const expirationTime = 24 * 60 * 60 * 1000; // 24 hours for demo
+
+    return tokenAge > expirationTime;
+};
+
+export const validateToken = async (token: string): Promise<boolean> => {
+    // In a real implementation, you would call your backend API to validate the token
+    // For now, we'll assume the token is valid if it's not expired
+    return !isTokenExpired(token);
+};
+
+export const requestForToken = async (): Promise<string | null> => {
     if (typeof window === 'undefined') return null;
 
     // Use a singleton pattern to prevent multiple simultaneous requests
@@ -125,7 +194,17 @@ export const requestForToken = async () => {
             }
 
             if (currentToken) {
-                console.log("FCM Token retrieved successfuly");
+                console.log("FCM Token retrieved successfully");
+
+                // Save token to storage
+                saveTokenToStorage(currentToken);
+
+                // Schedule token renewal
+                scheduleTokenRenewal(currentToken);
+
+                // Schedule token validation
+                scheduleTokenValidation(currentToken);
+
                 return currentToken;
             } else {
                 console.warn("No registration token available. Check VAPID key in Firebase Console.");
@@ -146,6 +225,126 @@ export const requestForToken = async () => {
     return tokenRequestPromise;
 };
 
+export const refreshToken = async (): Promise<string | null> => {
+    try {
+        console.log("Refreshing token...");
+        const newToken = await requestForToken();
+
+        if (newToken) {
+            console.log("Token refreshed successfully");
+
+            // Clear previous renewal timer
+            if (tokenRenewalTimer) {
+                clearTimeout(tokenRenewalTimer);
+                tokenRenewalTimer = null;
+            }
+
+            // Schedule new renewal
+            scheduleTokenRenewal(newToken);
+
+            return newToken;
+        } else {
+            throw new Error("Failed to refresh token");
+        }
+    } catch (error) {
+        console.error("Error refreshing token:", error);
+        return null;
+    }
+};
+
+export const invalidateToken = async (): Promise<void> => {
+    try {
+        const msg = await messaging();
+        if (msg) {
+            console.log("Invalidating token...");
+            await deleteToken(msg);
+            console.log("Token invalidated successfully");
+        }
+    } catch (error) {
+        console.error("Error invalidating token:", error);
+    } finally {
+        // Clear storage
+        saveTokenToStorage(null);
+
+        // Clear timers
+        if (tokenRenewalTimer) {
+            clearTimeout(tokenRenewalTimer);
+            tokenRenewalTimer = null;
+        }
+        if (tokenValidationTimer) {
+            clearTimeout(tokenValidationTimer);
+            tokenValidationTimer = null;
+        }
+    }
+};
+
+export const updateToken = async (newToken: string): Promise<boolean> => {
+    try {
+        const isValid = await validateToken(newToken);
+
+        if (isValid) {
+            console.log("Token updated successfully");
+
+            // Save the updated token
+            saveTokenToStorage(newToken);
+
+            // Schedule renewal and validation
+            scheduleTokenRenewal(newToken);
+            scheduleTokenValidation(newToken);
+
+            return true;
+        } else {
+            console.error("Invalid token provided");
+            return false;
+        }
+    } catch (error) {
+        console.error("Error updating token:", error);
+        return false;
+    }
+};
+
+const scheduleTokenRenewal = (token: string) => {
+    // Calculate renewal time (5 minutes before expiration)
+    const savedAt = localStorage.getItem(`${TOKEN_STORAGE_KEY}_timestamp`);
+    if (!savedAt) return;
+
+    const tokenAge = Date.now() - parseInt(savedAt);
+    const timeUntilRenewal = (24 * 60 * 60 * 1000) - tokenAge - TOKEN_EXPIRATION_GRACE_PERIOD;
+
+    // Clear previous renewal timer
+    if (tokenRenewalTimer) {
+        clearTimeout(tokenRenewalTimer);
+    }
+
+    // Schedule new renewal
+    tokenRenewalTimer = setTimeout(() => {
+        refreshToken();
+    }, timeUntilRenewal);
+
+    console.log(`Token renewal scheduled in ${timeUntilRenewal / (60 * 1000)} minutes`);
+};
+
+const scheduleTokenValidation = (token: string) => {
+    // Clear previous validation timer
+    if (tokenValidationTimer) {
+        clearTimeout(tokenValidationTimer);
+    }
+
+    // Schedule token validation every 5 minutes
+    tokenValidationTimer = setInterval(async () => {
+        try {
+            const isValid = await validateToken(token);
+            if (!isValid) {
+                console.log("Token validation failed, invalidating token");
+                await invalidateToken();
+            }
+        } catch (error) {
+            console.error("Error during token validation:", error);
+        }
+    }, TOKEN_VALIDATION_INTERVAL);
+
+    console.log(`Token validation scheduled every ${TOKEN_VALIDATION_INTERVAL / (60 * 1000)} minutes`);
+};
 
 export const onMessageListener = async () => {
     const msg = await messaging();

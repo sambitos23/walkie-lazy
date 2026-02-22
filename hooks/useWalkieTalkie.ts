@@ -141,5 +141,5 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
         }
     };
 
-    return { startTalking, stopTalking, sendPing, clearSignal, audioRef, fcmToken, isIncomingCall };
+    return { startTalking, stopTalking, sendPing, clearSignal, audioRef, fcmToken, setFcmToken, isIncomingCall };
 };
