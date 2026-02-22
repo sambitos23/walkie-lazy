@@ -1,43 +1,5 @@
-// src/app/api/notify/route.ts
 import { NextResponse } from 'next/server';
-import admin from 'firebase-admin';
-
-// Initialize Firebase Admin (Server Side)
-function getFirebaseAdmin() {
-    if (!admin.apps.length) {
-        const projectId = process.env.FIREBASE_PROJECT_ID;
-        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-        let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-
-        if (!projectId || !clientEmail || !privateKey) {
-            console.error('Firebase Admin credentials missing from environment variables');
-            return null;
-        }
-
-        // Handle both literal newlines and escaped newlines (\n)
-        if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-            privateKey = privateKey.substring(1, privateKey.length - 1);
-        }
-
-        const formattedKey = privateKey.replace(/\\n/g, '\n');
-
-        try {
-            admin.initializeApp({
-                credential: admin.credential.cert({
-                    projectId,
-                    clientEmail,
-                    privateKey: formattedKey,
-                }),
-            });
-            console.log('Firebase Admin initialized successfully');
-        } catch (error) {
-            console.error('Failed to initialize Firebase Admin:', error);
-            return null;
-        }
-    }
-    return admin;
-}
-
+import { getMessaging, isFirebaseReady } from '@/lib/firebaseInit';
 
 export async function POST(request: Request) {
     try {
@@ -52,11 +14,19 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid targetToken format' }, { status: 400 });
         }
 
-        const firebaseAdmin = getFirebaseAdmin();
-        if (!firebaseAdmin) {
+        // Initialize Firebase
+        if (!isFirebaseReady()) {
             return NextResponse.json({
                 error: 'Server configuration error: Firebase Admin not initialized',
                 details: 'Check server logs for missing environment variables or initialization errors.'
+            }, { status: 500 });
+        }
+
+        const messaging = getMessaging();
+        if (!messaging) {
+            return NextResponse.json({
+                error: 'Server configuration error: Firebase Messaging not available',
+                details: 'Check server logs for Firebase initialization errors.'
             }, { status: 500 });
         }
 
@@ -69,7 +39,7 @@ export async function POST(request: Request) {
         };
 
         console.log(`Sending notification to token: ${targetToken.substring(0, 10)}...`);
-        await firebaseAdmin.messaging().send(payload);
+        await messaging.send(payload);
         console.log('Notification sent successfully');
         return NextResponse.json({ success: true });
 

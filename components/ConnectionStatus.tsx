@@ -20,7 +20,8 @@ import {
   Link2,
   CheckCircle,
   XCircle,
-  InformationCircle,
+  Info,
+  WifiOff,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
@@ -170,7 +171,7 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ className = '' }) =
       default:
         return {
           color: 'text-gray-500',
-          icon: InformationCircle,
+          icon: Info,
           label: 'Unknown'
         };
     }
@@ -262,11 +263,10 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ className = '' }) =
               ) : (
                 <XCircle size={12} className="text-red-500" />
               )}
-              <span className={`font-black ${
-                isLoadingToken ? 'text-yellow-500' :
-                isTokenValid ? 'text-green-500' :
-                'text-red-500'
-              }">
+              <span className={`font-black ${isLoadingToken ? 'text-yellow-500' :
+                  isTokenValid ? 'text-green-500' :
+                    'text-red-500'
+                }`}>
                 {isLoadingToken ? 'LOADING' : isTokenValid ? 'VALID' : 'INVALID'}
               </span>
             </div>
@@ -276,9 +276,8 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ className = '' }) =
           {!isLoadingToken && tokenExpiration && (
             <div className="flex items-center justify-between text-xs">
               <span className="text-white/60">TOKEN_EXPIRES</span>
-              <span className={`font-mono ${
-                tokenExpiration.getTime() - Date.now() < 300000 ? 'text-red-500' : 'text-white/80'
-              }`}>
+              <span className={`font-mono ${tokenExpiration.getTime() - Date.now() < 300000 ? 'text-red-500' : 'text-white/80'
+                }`}>
                 {getTimeUntilExpiration(tokenExpiration)}
               </span>
             </div>
@@ -322,12 +321,11 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ className = '' }) =
             <div className="flex items-center gap-1">
               <div className="w-24 bg-[#333] rounded-full h-2">
                 <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    connectionQuality.signalStrength >= 80 ? 'bg-green-500' :
+                  className={`h-full rounded-full transition-all duration-300 ${connectionQuality.signalStrength >= 80 ? 'bg-green-500' :
                     connectionQuality.signalStrength >= 60 ? 'bg-yellow-500' :
-                    connectionQuality.signalStrength >= 40 ? 'bg-orange-500' :
-                    'bg-red-500'
-                  }`}
+                      connectionQuality.signalStrength >= 40 ? 'bg-orange-500' :
+                        'bg-red-500'
+                    }`}
                   style={{ width: `${connectionQuality.signalStrength}%` }}
                 />
               </div>
@@ -343,11 +341,10 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ className = '' }) =
               <TrendingUp size={16} className="text-white/60" />
               <span className="text-white/60 font-black">LATENCY</span>
             </div>
-            <span className={`font-black text-sm ${
-              connectionQuality.latency < 100 ? 'text-green-500' :
+            <span className={`font-black text-sm ${connectionQuality.latency < 100 ? 'text-green-500' :
               connectionQuality.latency < 200 ? 'text-yellow-500' :
-              'text-red-500'
-            }`}>
+                'text-red-500'
+              }`}>
               {connectionQuality.latency}ms
             </span>
           </div>
@@ -358,11 +355,10 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ className = '' }) =
               <Activity size={16} className="text-white/60" />
               <span className="text-white/60 font-black">PACKET_LOSS</span>
             </div>
-            <span className={`font-black text-sm ${
-              connectionQuality.packetLoss < 1 ? 'text-green-500' :
+            <span className={`font-black text-sm ${connectionQuality.packetLoss < 1 ? 'text-green-500' :
               connectionQuality.packetLoss < 3 ? 'text-yellow-500' :
-              'text-red-500'
-            }`}>
+                'text-red-500'
+              }`}>
               {connectionQuality.packetLoss}%
             </span>
           </div>
@@ -389,12 +385,11 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ className = '' }) =
               connectionHistory.map((entry, index) => (
                 <div key={index} className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${
-                      entry.status === 'connected' ? 'bg-green-500' :
+                    <div className={`w-2 h-2 rounded-full ${entry.status === 'connected' ? 'bg-green-500' :
                       entry.status === 'success' ? 'bg-green-500' :
-                      entry.status === 'error' ? 'bg-red-500' :
-                      'bg-yellow-500'
-                    }`} />
+                        entry.status === 'error' ? 'bg-red-500' :
+                          'bg-yellow-500'
+                      }`} />
                     <span className="text-white/80">
                       {entry.event}
                     </span>

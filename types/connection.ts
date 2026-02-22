@@ -1,4 +1,4 @@
-// Connection types for the Walkie-Talkie application
+import type { Peer, MediaConnection } from 'peerjs';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
 

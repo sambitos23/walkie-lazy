@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { requestForToken, onMessageListener } from "../lib/firebase";
-import { v4 as uuidv4 } from "uuid";
 
 // Token Manager Hook
 // Provides comprehensive token management with automatic renewal, validation, and real-time updates
@@ -214,29 +213,14 @@ export const useTokenManager = () => {
     useEffect(() => {
         let isMounted = true;
 
-        const setupMessageListener = async () => {
-            try {
-                const listener = await onMessageListener();
-
-                if (listener) {
-                    console.log("Set up message listener for token updates");
-
-                    const handleMessage = (payload: any) => {
-                        if (isMounted) {
-                            handleTokenUpdate(payload);
-                        }
-                    };
-
-                    listener.then(handleMessage).catch((error) => {
-                        console.error("Error handling message:", error);
-                    });
-                }
-            } catch (error) {
-                console.error("Error setting up message listener:", error);
+        onMessageListener().then((payload) => {
+            if (isMounted && payload) {
+                handleTokenUpdate(payload);
             }
-        };
+        }).catch((error) => {
+            console.error("Error handling message:", error);
+        });
 
-        setupMessageListener();
 
         return () => {
             isMounted = false;

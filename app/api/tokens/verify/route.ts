@@ -1,40 +1,6 @@
-import { firebaseAdmin, getFirestore, getMessaging, isFirebaseReady } from '../../lib/firebaseInit';
-
-// Initialize Firebase Admin (Server Side)
-function getFirebaseAdmin() {
-    if (!admin.apps.length) {
-        const projectId = process.env.FIREBASE_PROJECT_ID;
-        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-        let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-
-        if (!projectId || !clientEmail || !privateKey) {
-            console.error('Firebase Admin credentials missing from environment variables');
-            return null;
-        }
-
-        // Handle both literal newlines and escaped newlines (\n)
-        if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-            privateKey = privateKey.substring(1, privateKey.length - 1);
-        }
-
-        const formattedKey = privateKey.replace(/\\n/g, '\n');
-
-        try {
-            admin.initializeApp({
-                credential: admin.credential.cert({
-                    projectId,
-                    clientEmail,
-                    privateKey: formattedKey,
-                }),
-            });
-            console.log('Firebase Admin initialized successfully');
-        } catch (error) {
-            console.error('Failed to initialize Firebase Admin:', error);
-            return null;
-        }
-    }
-    return admin;
-}
+import { NextResponse } from 'next/server';
+import { getFirestore, isFirebaseReady } from '@/lib/firebaseInit';
+import { validateToken } from '@/lib/tokenValidator';
 
 export async function POST(request: Request) {
     try {
@@ -51,16 +17,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid token format' }, { status: 400 });
         }
 
-        const firebaseAdmin = getFirebaseAdmin();
         // Initialize Firebase
         if (!isFirebaseReady()) {
-            const firebaseAdmin = getFirebaseAdmin();
-            if (!firebaseAdmin) {
-                return NextResponse.json({
-                    error: 'Server configuration error: Firebase Admin not initialized',
-                    details: 'Check server logs for missing environment variables or initialization errors.'
-                }, { status: 500 });
-            }
+            return NextResponse.json({
+                error: 'Server configuration error: Firebase Admin not initialized',
+                details: 'Check server logs for missing environment variables or initialization errors.'
+            }, { status: 500 });
         }
 
         const firestore = getFirestore();
@@ -150,9 +112,14 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'token query parameter is required' }, { status: 400 });
         }
 
-        // For GET requests, we'll still use the same validation logic
-        const response = await POST(request);
-        return response;
+        // We can manually call POST or just reimplement the logic. 
+        // Using a internal function would be better but let's keep it simple.
+        const body = { token };
+        const mockRequest = {
+            json: async () => body
+        } as unknown as Request;
+
+        return POST(mockRequest);
 
     } catch (error: any) {
         console.error('Error handling GET token validation:', error);

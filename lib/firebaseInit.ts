@@ -59,3 +59,5 @@ export function getMessaging() {
 export function initializeFirebase() {
     return getFirebaseAdmin();
 }
+
+export { admin };

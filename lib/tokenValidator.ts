@@ -1,40 +1,5 @@
+import admin from 'firebase-admin';
 import { firebaseAdmin, getFirestore, getMessaging, isFirebaseReady } from './firebaseInit';
-
-// Initialize Firebase Admin (Server Side)
-function getFirebaseAdmin() {
-    if (!admin.apps.length) {
-        const projectId = process.env.FIREBASE_PROJECT_ID;
-        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-        let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-
-        if (!projectId || !clientEmail || !privateKey) {
-            console.error('Firebase Admin credentials missing from environment variables');
-            return null;
-        }
-
-        // Handle both literal newlines and escaped newlines (\n)
-        if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-            privateKey = privateKey.substring(1, privateKey.length - 1);
-        }
-
-        const formattedKey = privateKey.replace(/\\n/g, '\n');
-
-        try {
-            admin.initializeApp({
-                credential: admin.credential.cert({
-                    projectId,
-                    clientEmail,
-                    privateKey: formattedKey,
-                }),
-            });
-            console.log('Firebase Admin initialized successfully');
-        } catch (error) {
-            console.error('Failed to initialize Firebase Admin:', error);
-            return null;
-        }
-    }
-    return admin;
-}
 
 // Token validation configuration
 const TOKEN_EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours
@@ -49,14 +14,13 @@ export function isValidTokenFormat(token: string): boolean {
 // Check if token is blacklisted
 export async function isTokenBlacklisted(token: string): Promise<boolean> {
     try {
-        const firebaseAdmin = getFirebaseAdmin();
         if (!firebaseAdmin) return false;
 
         const blacklistRef = firebaseAdmin.firestore().collection(TOKEN_BLACKLIST_COLLECTION);
         const blacklistDoc = await blacklistRef.doc(token).get();
 
         return blacklistDoc.exists;
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error checking token blacklist:', error);
         return false; // Be permissive on error
     }
@@ -65,14 +29,13 @@ export async function isTokenBlacklisted(token: string): Promise<boolean> {
 // Check token in Firebase
 export async function isTokenInFirebase(token: string): Promise<boolean> {
     try {
-        const firebaseAdmin = getFirebaseAdmin();
         if (!firebaseAdmin) return false;
 
         const tokenRef = firebaseAdmin.firestore().collection('tokens').doc(token);
         const tokenDoc = await tokenRef.get();
 
         return tokenDoc.exists;
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error checking token in Firebase:', error);
         return false; // Be permissive on error
     }
@@ -81,7 +44,6 @@ export async function isTokenInFirebase(token: string): Promise<boolean> {
 // Check token invalidation status
 export async function isTokenInvalidated(token: string): Promise<boolean> {
     try {
-        const firebaseAdmin = getFirebaseAdmin();
         if (!firebaseAdmin) return false;
 
         const tokenRef = firebaseAdmin.firestore().collection('tokens').doc(token);
@@ -91,7 +53,7 @@ export async function isTokenInvalidated(token: string): Promise<boolean> {
 
         const tokenData = tokenDoc.data();
         return tokenData?.invalidated === true;
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error checking token invalidation:', error);
         return false; // Be permissive on error
     }
@@ -100,7 +62,6 @@ export async function isTokenInvalidated(token: string): Promise<boolean> {
 // Check token expiration
 export async function isTokenExpired(token: string): Promise<boolean> {
     try {
-        const firebaseAdmin = getFirebaseAdmin();
         if (!firebaseAdmin) return true; // Assume expired if can't check
 
         const tokenRef = firebaseAdmin.firestore().collection('tokens').doc(token);
@@ -115,7 +76,7 @@ export async function isTokenExpired(token: string): Promise<boolean> {
 
         const tokenAge = Date.now() - createdAt.getTime();
         return tokenAge > TOKEN_EXPIRATION_TIME;
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error checking token expiration:', error);
         return true; // Be conservative on error
     }
@@ -128,7 +89,7 @@ export async function isTokenValidInMessaging(token: string): Promise<boolean> {
         // For now, we'll return true as a placeholder
         // In a real implementation, you would use firebaseAdmin.messaging().send() with dryRun: true
         return true;
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error checking token in Firebase Messaging:', error);
         return false;
     }
@@ -157,7 +118,7 @@ export async function validateToken(token: string): Promise<boolean> {
         // - Valid in Firebase Messaging
         return !isBlacklisted && isInFirebase && !isInvalidated && !isExpired && isValidInMessaging;
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error during token validation:', error);
         return false;
     }
@@ -203,17 +164,16 @@ export async function validateTokenWithInfo(token: string): Promise<{
         const isValid = reasons.length === 0;
         return { valid: isValid, reasons, details };
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error during detailed token validation:', error);
         reasons.push('Validation error occurred');
-        return { valid: false, reasons, details: { error: error.message } };
+        return { valid: false, reasons, details: { error: (error as any).message } };
     }
 }
 
 // Add token to blacklist
 export async function blacklistToken(token: string): Promise<boolean> {
     try {
-        const firebaseAdmin = getFirebaseAdmin();
         if (!firebaseAdmin) return false;
 
         const blacklistRef = firebaseAdmin.firestore().collection(TOKEN_BLACKLIST_COLLECTION);
@@ -225,7 +185,7 @@ export async function blacklistToken(token: string): Promise<boolean> {
 
         console.log(`Token blacklisted: ${token}`);
         return true;
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error blacklisting token:', error);
         return false;
     }
@@ -234,7 +194,6 @@ export async function blacklistToken(token: string): Promise<boolean> {
 // Remove token from blacklist
 export async function removeTokenFromBlacklist(token: string): Promise<boolean> {
     try {
-        const firebaseAdmin = getFirebaseAdmin();
         if (!firebaseAdmin) return false;
 
         const blacklistRef = firebaseAdmin.firestore().collection(TOKEN_BLACKLIST_COLLECTION);
@@ -242,7 +201,7 @@ export async function removeTokenFromBlacklist(token: string): Promise<boolean> 
 
         console.log(`Token removed from blacklist: ${token}`);
         return true;
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error removing token from blacklist:', error);
         return false;
     }

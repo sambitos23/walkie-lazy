@@ -1,46 +1,14 @@
-import { firebaseAdmin, getFirestore, getMessaging, isFirebaseReady } from '../../lib/firebaseInit';
-
-// Initialize Firebase Admin (Server Side)
-function getFirebaseAdmin() {
-    if (!admin.apps.length) {
-        const projectId = process.env.FIREBASE_PROJECT_ID;
-        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-        let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-
-        if (!projectId || !clientEmail || !privateKey) {
-            console.error('Firebase Admin credentials missing from environment variables');
-            return null;
-        }
-
-        // Handle both literal newlines and escaped newlines (\n)
-        if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-            privateKey = privateKey.substring(1, privateKey.length - 1);
-        }
-
-        const formattedKey = privateKey.replace(/\\n/g, '\n');
-
-        try {
-            admin.initializeApp({
-                credential: admin.credential.cert({
-                    projectId,
-                    clientEmail,
-                    privateKey: formattedKey,
-                }),
-            });
-            console.log('Firebase Admin initialized successfully');
-        } catch (error) {
-            console.error('Failed to initialize Firebase Admin:', error);
-            return null;
-        }
-    }
-    return admin;
-}
+import { NextResponse } from 'next/server';
+import admin from 'firebase-admin';
+import { firebaseAdmin, getFirestore, getMessaging, isFirebaseReady } from '@/lib/firebaseInit';
+import { validateToken } from '@/lib/tokenValidator';
+import { rateLimit } from '@/lib/rateLimiter';
 
 // Token registration endpoint
 export async function POST(request: Request) {
     try {
         // Apply rate limiting
-        const rateLimitResult = await rateLimit(request, 'token_registration');
+        const rateLimitResult = await rateLimit(request as any, 'token_registration');
         if (!rateLimitResult.allowed) {
             return NextResponse.json({
                 error: 'Rate limit exceeded',
@@ -66,14 +34,11 @@ export async function POST(request: Request) {
         }
 
         // Initialize Firebase
-        if (!isFirebaseReady()) {
-            const firebaseAdmin = getFirebaseAdmin();
-            if (!firebaseAdmin) {
-                return NextResponse.json({
-                    error: 'Server configuration error: Firebase Admin not initialized',
-                    details: 'Check server logs for missing environment variables or initialization errors.'
-                }, { status: 500 });
-            }
+        if (!isFirebaseReady) {
+            return NextResponse.json({
+                error: 'Server configuration error: Firebase Admin not initialized',
+                details: 'Check server logs for missing environment variables or initialization errors.'
+            }, { status: 500 });
         }
 
         const firestore = getFirestore();
@@ -81,11 +46,6 @@ export async function POST(request: Request) {
             return NextResponse.json({
                 error: 'Server configuration error: Firestore not available',
                 details: 'Check server logs for Firebase initialization errors.'
-            }, { status: 500 });
-        }
-            return NextResponse.json({
-                error: 'Server configuration error: Firebase Admin not initialized',
-                details: 'Check server logs for missing environment variables or initialization errors.'
             }, { status: 500 });
         }
 
@@ -100,9 +60,9 @@ export async function POST(request: Request) {
                 metadata: {
                     ...existingToken.data()?.metadata,
                     ...metadata,
-                    lastUpdated: firestore.FieldValue.serverTimestamp(),
+                    lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
                 },
-                updatedAt: firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
         } else {
             // Create new token entry
@@ -110,8 +70,8 @@ export async function POST(request: Request) {
                 token,
                 userId,
                 metadata: metadata || {},
-                createdAt: firestore.FieldValue.serverTimestamp(),
-                updatedAt: firestore.FieldValue.serverTimestamp(),
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
         }
 
@@ -135,7 +95,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
     try {
         // Apply rate limiting
-        const rateLimitResult = await rateLimit(request, 'token_exchange');
+        const rateLimitResult = await rateLimit(request as any, 'token_exchange');
         if (!rateLimitResult.allowed) {
             return NextResponse.json({
                 error: 'Rate limit exceeded',
@@ -156,26 +116,18 @@ export async function PUT(request: Request) {
         }
 
         // Initialize Firebase
-        if (!isFirebaseReady()) {
-            const firebaseAdmin = getFirebaseAdmin();
-            if (!firebaseAdmin) {
-                return NextResponse.json({
-                    error: 'Server configuration error: Firebase Admin not initialized',
-                    details: 'Check server logs for missing environment variables or initialization errors.'
-                }, { status: 500 });
-            }
-        }
-
-        const firestore = getFirestore();
-        if (!firestore) {
-            return NextResponse.json({
-                error: 'Server configuration error: Firestore not available',
-                details: 'Check server logs for Firebase initialization errors.'
-            }, { status: 500 });
-        }
+        if (!isFirebaseReady) {
             return NextResponse.json({
                 error: 'Server configuration error: Firebase Admin not initialized',
                 details: 'Check server logs for missing environment variables or initialization errors.'
+            }, { status: 500 });
+        }
+
+        const firestore = getFirestore();
+        if (!firestore || !firebaseAdmin) {
+            return NextResponse.json({
+                error: 'Server configuration error: Firestore not available',
+                details: 'Check server logs for Firebase initialization errors.'
             }, { status: 500 });
         }
 
@@ -195,8 +147,8 @@ export async function PUT(request: Request) {
 
         // Get token details
         const [sourceTokenDoc, targetTokenDoc] = await Promise.all([
-            firebaseAdmin.firestore().collection('tokens').doc(sourceToken).get(),
-            firebaseAdmin.firestore().collection('tokens').doc(targetToken).get()
+            firestore.collection('tokens').doc(sourceToken).get(),
+            firestore.collection('tokens').doc(targetToken).get()
         ]);
 
         if (!sourceTokenDoc.exists || !targetTokenDoc.exists) {
@@ -207,7 +159,7 @@ export async function PUT(request: Request) {
         const targetUserId = targetTokenDoc.data()?.userId;
 
         // Log the token exchange
-        await firebaseAdmin.firestore().collection('tokenExchanges').add({
+        await firestore.collection('tokenExchanges').add({
             sourceToken,
             targetToken,
             sourceUserId,
@@ -217,22 +169,24 @@ export async function PUT(request: Request) {
         });
 
         // Send notification to target user
-        const payload = {
-            notification: {
-                title: 'Token Exchange',
-                body: message || 'You have received a token exchange',
-            },
-            token: targetToken,
-        };
+        const messaging = getMessaging();
+        if (messaging) {
+            const payload = {
+                notification: {
+                    title: 'Token Exchange',
+                    body: message || 'You have received a token exchange',
+                },
+                token: targetToken,
+            };
 
-        console.log(`Sending exchange notification to token: ${targetToken.substring(0, 10)}...`);
-        await firebaseAdmin.messaging().send(payload);
-        console.log('Exchange notification sent successfully');
+            console.log(`Sending exchange notification to token: ${targetToken.substring(0, 10)}...`);
+            await messaging.send(payload);
+            console.log('Exchange notification sent successfully');
+        }
 
         return NextResponse.json({
             success: true,
-            message: 'Token exchange successful',
-            exchangeId: payload.notification.body
+            message: 'Token exchange successful'
         });
 
     } catch (error: any) {
@@ -248,7 +202,7 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
     try {
         // Apply rate limiting
-        const rateLimitResult = await rateLimit(request, 'token_revocation');
+        const rateLimitResult = await rateLimit(request as any, 'token_revocation');
         if (!rateLimitResult.allowed) {
             return NextResponse.json({
                 error: 'Rate limit exceeded',
@@ -264,14 +218,11 @@ export async function DELETE(request: Request) {
         }
 
         // Initialize Firebase
-        if (!isFirebaseReady()) {
-            const firebaseAdmin = getFirebaseAdmin();
-            if (!firebaseAdmin) {
-                return NextResponse.json({
-                    error: 'Server configuration error: Firebase Admin not initialized',
-                    details: 'Check server logs for missing environment variables or initialization errors.'
-                }, { status: 500 });
-            }
+        if (!isFirebaseReady) {
+            return NextResponse.json({
+                error: 'Server configuration error: Firebase Admin not initialized',
+                details: 'Check server logs for missing environment variables or initialization errors.'
+            }, { status: 500 });
         }
 
         const firestore = getFirestore();
@@ -281,14 +232,9 @@ export async function DELETE(request: Request) {
                 details: 'Check server logs for Firebase initialization errors.'
             }, { status: 500 });
         }
-            return NextResponse.json({
-                error: 'Server configuration error: Firebase Admin not initialized',
-                details: 'Check server logs for missing environment variables or initialization errors.'
-            }, { status: 500 });
-        }
 
         // Invalidate token in Firebase
-        const tokenRef = firebaseAdmin.firestore().collection('tokens').doc(token);
+        const tokenRef = firestore.collection('tokens').doc(token);
         const tokenDoc = await tokenRef.get();
 
         if (!tokenDoc.exists) {
@@ -299,25 +245,6 @@ export async function DELETE(request: Request) {
             invalidated: true,
             invalidatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-
-        // Delete from Firebase Messaging
-        try {
-            const msg = await import('firebase/messaging');
-            if (msg.isSupported()) {
-                const messaging = await import('firebase/messaging');
-                const fcm = await import('firebase/messaging');
-                const messagingInstance = await import('firebase/messaging');
-                const messagingClient = await import('firebase/messaging');
-                const fcmClient = await import('firebase/messaging');
-                const messagingService = await import('firebase/messaging');
-                const fcmService = await import('firebase/messaging');
-
-                // This is a placeholder - actual implementation would need proper Firebase Messaging client
-                console.log('Token invalidation request sent to Firebase Messaging');
-            }
-        } catch (error) {
-            console.warn('Could not invalidate token in Firebase Messaging:', error);
-        }
 
         console.log(`Token invalidated: ${token}`);
         return NextResponse.json({

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 
 // Rate limiting configuration
 const RATE_LIMITS = {
+    token_registration: {
         windowMs: 15 * 60 * 1000, // 15 minutes
         max: 10, // limit each IP to 10 requests per windowMs
         message: 'Too many token registration requests from this IP'
@@ -23,6 +24,8 @@ const RATE_LIMITS = {
     }
 };
 
+type EndpointType = keyof typeof RATE_LIMITS;
+
 // In-memory rate limiting store
 interface RateLimitStore {
     [key: string]: {
@@ -34,8 +37,9 @@ interface RateLimitStore {
 const rateLimitStore: RateLimitStore = {};
 
 // Rate limiting function
-export async function rateLimit(request: NextRequest, endpointType: keyof typeof RATE_LIMITS) {
-    const ip = request.ip || 'unknown';
+export async function rateLimit(request: NextRequest, endpointType: EndpointType) {
+    // Get IP from request
+    const ip = (request as any).ip || request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
     const endpointConfig = RATE_LIMITS[endpointType];
 
     if (!endpointConfig) {
@@ -45,11 +49,14 @@ export async function rateLimit(request: NextRequest, endpointType: keyof typeof
     const now = Date.now();
     const key = `${ip}_${endpointType}`;
 
-    // Clean up old entries
-    for (const storeKey in rateLimitStore) {
-        const entry = rateLimitStore[storeKey];
-        if (now - entry.windowStart > RATE_LIMITS[storeKey.split('_')[1]].windowMs) {
-            delete rateLimitStore[storeKey];
+    // Clean up old entries occasionally (simple cleanup)
+    if (Math.random() < 0.1) {
+        for (const storeKey in rateLimitStore) {
+            const entry = rateLimitStore[storeKey];
+            const type = storeKey.split('_')[1] as EndpointType;
+            if (RATE_LIMITS[type] && now - entry.windowStart > RATE_LIMITS[type].windowMs) {
+                delete rateLimitStore[storeKey];
+            }
         }
     }
 
@@ -63,12 +70,11 @@ export async function rateLimit(request: NextRequest, endpointType: keyof typeof
         rateLimitStore[key] = entry;
     }
 
-    // Check if we're in the same window
+    // Check if we're in a new window
     if (now - entry.windowStart > endpointConfig.windowMs) {
-        // New window, reset counter
         entry.count = 1;
         entry.windowStart = now;
-        return { allowed: true };
+        return { allowed: true, remaining: endpointConfig.max - 1, reset: endpointConfig.windowMs };
     }
 
     // Increment count
@@ -84,45 +90,46 @@ export async function rateLimit(request: NextRequest, endpointType: keyof typeof
             allowed: false,
             retryAfter: retryAfter,
             limit: endpointConfig.max,
-            remaining: Math.max(0, endpointConfig.max - entry.count + 1),
-            reset: Math.ceil(entry.windowStart + endpointConfig.windowMs - now)
+            remaining: 0,
+            reset: timeUntilReset
         };
     }
 
     return {
         allowed: true,
-        remaining: Math.max(0, endpointConfig.max - entry.count),
-        reset: Math.ceil(entry.windowStart + endpointConfig.windowMs - now)
+        remaining: endpointConfig.max - entry.count,
+        reset: endpointConfig.windowMs - (now - entry.windowStart)
     };
 }
 
 // Get rate limit info for debugging
-export function getRateLimitInfo(ip: string, endpointType: keyof typeof RATE_LIMITS) {
+export function getRateLimitInfo(ip: string, endpointType: EndpointType) {
     const key = `${ip}_${endpointType}`;
     const entry = rateLimitStore[key];
+    const config = RATE_LIMITS[endpointType];
 
     if (!entry) {
         return {
-            limit: RATE_LIMITS[endpointType].max,
-            remaining: RATE_LIMITS[endpointType].max,
+            limit: config.max,
+            remaining: config.max,
             reset: 0
         };
     }
 
     const now = Date.now();
     const timeSinceWindowStart = now - entry.windowStart;
-    const timeUntilReset = RATE_LIMITS[endpointType].windowMs - timeSinceWindowStart;
+    const timeUntilReset = config.windowMs - timeSinceWindowStart;
 
     return {
-        limit: RATE_LIMITS[endpointType].max,
-        remaining: Math.max(0, RATE_LIMITS[endpointType].max - entry.count),
+        limit: config.max,
+        remaining: Math.max(0, config.max - entry.count),
         reset: Math.ceil(timeUntilReset / 1000) // Convert to seconds
     };
 }
 
-// Middleware for rate limiting
-export function rateLimitMiddleware(endpointType: keyof typeof RATE_LIMITS) {
-    return async (request: NextRequest, next: () => Promise<Response>) => {
+// Middleware for rate limiting (Higher order function)
+export function rateLimitMiddleware(endpointType: EndpointType) {
+    return async (request: NextRequest, handler: (req: NextRequest) => Promise<Response>) => {
         const rateLimitResult = await rateLimit(request, endpointType);
 
         if (!rateLimitResult.allowed) {
@@ -138,32 +145,29 @@ export function rateLimitMiddleware(endpointType: keyof typeof RATE_LIMITS) {
                     status: 429,
                     headers: {
                         'Content-Type': 'application/json',
-                        'Retry-After': rateLimitResult.retryAfter.toString()
+                        'Retry-After': (rateLimitResult.retryAfter || 0).toString()
                     }
                 }
             );
         }
 
-        const response = await next();
+        const response = await handler(request);
 
         // Add rate limit headers to response
         response.headers.set('X-RateLimit-Limit', RATE_LIMITS[endpointType].max.toString());
-        response.headers.set('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
-        response.headers.set('X-RateLimit-Reset', rateLimitResult.reset.toString());
+        response.headers.set('X-RateLimit-Remaining', (rateLimitResult.remaining ?? 0).toString());
+        response.headers.set('X-RateLimit-Reset', (rateLimitResult.reset ?? 0).toString());
 
         return response;
     };
 }
 
-export async function distributedRateLimit(request: NextRequest, endpointType: keyof typeof RATE_LIMITS) {
+export async function distributedRateLimit(request: NextRequest, endpointType: EndpointType) {
     try {
         // Fallback to in-memory rate limiting
         return await rateLimit(request, endpointType);
+    } catch (error) {
+        console.error('Rate limiting error:', error);
+        return { allowed: true };
     }
-
-        const ip = request.ip || 'unknown';
-        const endpointConfig = RATE_LIMITS[endpointType];
-        const key = `${ip}_${endpointType}`;
-        const now = Date.now();
-
 }
