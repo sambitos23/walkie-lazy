@@ -120,6 +120,9 @@ export default function WalkieBody() {
 
     if (!mounted) return null;
 
+    // Strip backticks from pasted tokens
+    const stripBackticks = (val: string) => val.replace(/`/g, '').trim();
+
     const handleTokenExchange = async () => {
         if (!remoteToken) {
             setExchangeStatus('failed');
@@ -163,7 +166,7 @@ export default function WalkieBody() {
 
     const handleCopyToken = () => {
         if (fcmToken) {
-            navigator.clipboard.writeText(fcmToken);
+            navigator.clipboard.writeText(`\`${fcmToken}\``);
             setExchangeStatus('success');
             setTimeout(() => setExchangeStatus('idle'), 3000);
         }
@@ -232,7 +235,7 @@ export default function WalkieBody() {
                         <button
                             onClick={() => {
                                 if (pendingRemoteToken) {
-                                    navigator.clipboard.writeText(pendingRemoteToken).catch(() => { });
+                                    navigator.clipboard.writeText(`\`${pendingRemoteToken}\``).catch(() => { });
                                 }
                                 setShowBrowserRedirect(false);
                             }}
@@ -315,7 +318,7 @@ export default function WalkieBody() {
                                 <div className="relative mb-3">
                                     <input
                                         value={remoteToken || ''}
-                                        onChange={(e) => setRemoteToken(e.target.value)}
+                                        onChange={(e) => setRemoteToken(stripBackticks(e.target.value))}
                                         placeholder="PASTE REMOTE TOKEN HERE"
                                         autoCapitalize="off"
                                         autoCorrect="off"
@@ -439,7 +442,7 @@ export default function WalkieBody() {
                     <input
                         placeholder="PASTE REMOTE TOKEN"
                         value={targetFcmToken}
-                        onChange={(e) => setTargetFcmToken(e.target.value)}
+                        onChange={(e) => setTargetFcmToken(stripBackticks(e.target.value))}
                         autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
@@ -489,7 +492,7 @@ export default function WalkieBody() {
                 {fcmToken && (
                     <div className="bg-[#ff8c00]/5 border border-[#ff8c00]/20 p-3 rounded-lg">
                         <span className="tactical-label block mb-1 text-green-500!">MY_BROADCAST_TOKEN:</span>
-                        <p className="text-[9px] text-green-500/80 break-all font-mono leading-relaxed select-text cursor-copy" onClick={() => { navigator.clipboard.writeText(fcmToken); alert("Token Copied!"); }}>{fcmToken}</p>
+                        <p className="text-[9px] text-green-500/80 break-all font-mono leading-relaxed select-text cursor-copy" onClick={() => { navigator.clipboard.writeText(`\`${fcmToken}\``); alert("Token Copied!"); }}>{fcmToken}</p>
                     </div>
                 )}
             </div>
