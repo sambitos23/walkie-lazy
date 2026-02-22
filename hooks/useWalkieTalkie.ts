@@ -1,19 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Peer, { MediaConnection } from 'peerjs';
-import { requestForToken } from '@/lib/firebase';
 
 export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmToken: string) => {
     const [peer, setPeer] = useState<Peer | null>(null);
     const [peerConnected, setPeerConnected] = useState(false);
     const [fcmToken, setFcmToken] = useState<string | null>(null);
-
     const [isIncomingCall, setIsIncomingCall] = useState(false);
+
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    // Outgoing: mic stream + call
     const streamRef = useRef<MediaStream | null>(null);
     const callRef = useRef<MediaConnection | null>(null);
+    // Incoming
     const incomingCallRef = useRef<MediaConnection | null>(null);
+    // Track if we're currently transmitting
+    const isTalkingRef = useRef(false);
 
-    // Show browser notification + vibrate when incoming signal arrives
+    // Show browser notification + vibrate (only from FCM/sendPing)
     const showIncomingNotification = (message?: string) => {
         if (navigator.vibrate) {
             navigator.vibrate([200, 100, 200, 100, 200]);
@@ -31,6 +34,35 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
             }
         }
     };
+
+    // Clean up any existing outgoing call + mic
+    const cleanupOutgoing = useCallback(() => {
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => {
+                track.enabled = false;
+                track.stop();
+            });
+            streamRef.current = null;
+        }
+        if (callRef.current) {
+            try { callRef.current.close(); } catch (e) { /* ignore */ }
+            callRef.current = null;
+        }
+        isTalkingRef.current = false;
+    }, []);
+
+    // Clean up any existing incoming call
+    const cleanupIncoming = useCallback(() => {
+        if (incomingCallRef.current) {
+            try { incomingCallRef.current.close(); } catch (e) { /* ignore */ }
+            incomingCallRef.current = null;
+        }
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.srcObject = null;
+        }
+        setIsIncomingCall(false);
+    }, []);
 
     useEffect(() => {
         // Listen for foreground FCM messages
@@ -52,49 +84,50 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
         const newPeer = new Peer(peerId);
 
         newPeer.on('open', (id) => {
-            console.log('PeerJS connected. Peer ID:', id);
+            console.log('PeerJS connected. ID:', id);
             setPeerConnected(true);
         });
 
         newPeer.on('disconnected', () => {
             console.log('PeerJS disconnected. Reconnecting...');
             setPeerConnected(false);
-            newPeer.reconnect();
+            try { newPeer.reconnect(); } catch (e) { /* ignore */ }
         });
 
         newPeer.on('error', (err) => {
             console.error('PeerJS error:', err);
-            // If the ID is taken, try with a random suffix
-            if (err.type === 'unavailable-id') {
-                console.warn('Peer ID already taken.');
-            }
         });
 
-        // Listen for incoming voice streams — silently answer and play audio
+        // Handle incoming calls
         newPeer.on('call', (call) => {
-            console.log("Incoming voice call from:", call.peer);
-            setIsIncomingCall(true);
+            console.log("Incoming call from:", call.peer);
 
-            // Answer to receive the audio stream
-            call.answer();
+            // Clean up any previous incoming call first
+            cleanupIncoming();
+
+            setIsIncomingCall(true);
+            call.answer(); // Answer without sending our mic back
             incomingCallRef.current = call;
 
             call.on('stream', (remoteStream) => {
-                console.log("Remote audio stream playing.");
+                console.log("Playing incoming audio. Tracks:", remoteStream.getAudioTracks().length);
                 if (audioRef.current) {
                     audioRef.current.srcObject = remoteStream;
                     audioRef.current.play().catch(e => {
-                        console.error("Audio playback blocked. User must interact with page first:", e);
+                        console.error("Audio playback blocked:", e);
                     });
                 }
             });
 
             call.on('close', () => {
-                console.log("Remote call ended.");
-                incomingCallRef.current = null;
-                setIsIncomingCall(false);
-                if (audioRef.current) {
-                    audioRef.current.srcObject = null;
+                console.log("Incoming call closed.");
+                if (incomingCallRef.current === call) {
+                    incomingCallRef.current = null;
+                    setIsIncomingCall(false);
+                    if (audioRef.current) {
+                        audioRef.current.pause();
+                        audioRef.current.srcObject = null;
+                    }
                 }
             });
         });
@@ -102,46 +135,56 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
         setPeer(newPeer);
         return () => {
             if (unsubscribe) unsubscribe();
+            cleanupOutgoing();
+            cleanupIncoming();
             newPeer.destroy();
             setPeer(null);
             setPeerConnected(false);
         }
-    }, [peerId]);
+    }, [peerId, cleanupOutgoing, cleanupIncoming]);
 
     const startTalking = async () => {
         if (!peer || !remotePeerId) {
             console.warn("Cannot transmit: set LOCAL_FREQ and TARGET_FREQ first.");
             return;
         }
+        if (isTalkingRef.current) {
+            console.warn("Already transmitting.");
+            return;
+        }
+
+        // Clean up any previous outgoing call
+        cleanupOutgoing();
+
         try {
-            console.log("Activating microphone...");
+            console.log("Mic ON — transmitting to", remotePeerId);
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             streamRef.current = stream;
-            console.log("Transmitting audio to", remotePeerId);
+            isTalkingRef.current = true;
+
             const call = peer.call(remotePeerId, stream);
             callRef.current = call;
+
+            // When the remote side closes, clean up our side too
+            call.on('close', () => {
+                console.log("Outgoing call closed by remote.");
+                cleanupOutgoing();
+            });
         } catch (err: any) {
             if (err.name === 'NotAllowedError') {
                 alert("🔴 MIC ACCESS DENIED: Please enable microphone access in your browser settings.");
             }
             console.error("Mic access error:", err);
+            isTalkingRef.current = false;
         }
     };
 
     const stopTalking = () => {
-        // Stop outgoing mic stream
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach(track => {
-                track.stop();
-                track.enabled = false;
-            });
-            streamRef.current = null;
+        if (!isTalkingRef.current && !streamRef.current && !callRef.current) {
+            return; // Nothing to stop
         }
-        // Close the outgoing call
-        if (callRef.current) {
-            callRef.current.close();
-            callRef.current = null;
-        }
+        console.log("Mic OFF — stopping transmission.");
+        cleanupOutgoing();
     };
 
     const sendPing = async () => {
