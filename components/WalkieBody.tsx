@@ -245,7 +245,14 @@ export default function WalkieBody() {
                         </button>
 
                         <button
-                            onClick={() => setShowBrowserRedirect(false)}
+                            onClick={() => {
+                                if (pendingRemoteToken) {
+                                    setRemoteToken(pendingRemoteToken);
+                                    setTargetFcmToken(pendingRemoteToken);
+                                    setConnectionStatus('connected');
+                                }
+                                setShowBrowserRedirect(false);
+                            }}
                             className="w-full py-3 rounded-xl text-xs font-black uppercase bg-white/5 text-white/40 active:bg-white/10 transition-all"
                         >
                             USE IN BROWSER ANYWAY
@@ -437,18 +444,6 @@ export default function WalkieBody() {
                         />
                     </div>
                 </div>
-                <div>
-                    <label className="tactical-label block mb-1 text-white/50">ENCRYPTION_KEY (FCM)</label>
-                    <input
-                        placeholder="PASTE REMOTE TOKEN"
-                        value={targetFcmToken}
-                        onChange={(e) => setTargetFcmToken(stripBackticks(e.target.value))}
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        className="w-full bg-black/60 border border-[#333] p-3 rounded-lg text-[10px] text-white focus:border-[#ff8c00] outline-none transition-all font-mono"
-                    />
-                </div>
                 <div className="flex items-center justify-between">
                     <label className="tactical-label text-white/50">ADVANCED SETTINGS</label>
                     <button
@@ -460,8 +455,21 @@ export default function WalkieBody() {
                 </div>
                 {showAdvancedSettings && (
                     <div className="bg-[#0a0a0b] p-4 rounded-lg border border-white/5">
-                        <h4 className="text-[#ff8c00] font-black mb-2">ADVANCED SETTINGS</h4>
+                        <h4 className="text-[#ff8c00] font-black mb-3">ADVANCED SETTINGS</h4>
                         <div className="space-y-3">
+                            {/* Remote FCM Token — moved here from main panel */}
+                            <div>
+                                <label className="tactical-label block mb-1 text-white/40">REMOTE FCM TOKEN</label>
+                                <input
+                                    placeholder="PASTE REMOTE TOKEN"
+                                    value={targetFcmToken}
+                                    onChange={(e) => setTargetFcmToken(stripBackticks(e.target.value))}
+                                    autoCapitalize="off"
+                                    autoCorrect="off"
+                                    spellCheck={false}
+                                    className="w-full bg-black/60 border border-[#333] p-2.5 rounded-lg text-[9px] text-white focus:border-[#ff8c00] outline-none transition-all font-mono"
+                                />
+                            </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-[10px] text-white/80">AUTO-EXCHANGE</span>
                                 <button

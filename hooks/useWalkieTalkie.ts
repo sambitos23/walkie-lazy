@@ -56,12 +56,10 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
 
         newPeer.on('open', (id) => console.log('Communication link established. Peer ID:', id));
 
-        // Listen for incoming voice streams
-        // Answer to receive the stream, and play audio while sender is transmitting
+        // Listen for incoming voice streams — silently answer and play audio
         newPeer.on('call', (call) => {
             console.log("Incoming voice call detected.");
             setIsIncomingCall(true);
-            showIncomingNotification('Incoming voice transmission!');
 
             // Answer to receive the audio stream
             call.answer();
@@ -97,25 +95,7 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
     }, [peerId]);
 
     const startTalking = async () => {
-        // 1. Send the Push Notification via API route
-        if (remoteFcmToken && remoteFcmToken.length > 50) {
-            try {
-                await fetch('/api/notify', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        targetToken: remoteFcmToken,
-                        message: `Incoming voice from ${peerId || 'unknown'}`
-                    }),
-                });
-            } catch (error) {
-                console.error("Push notification failed", error);
-            }
-        } else {
-            console.warn("Skipping push notification: Remote FCM token is missing or invalid.");
-        }
-
-        // 2. Capture mic and send stream via WebRTC
+        // Capture mic and send stream via WebRTC (no notification — use ping for that)
         try {
             console.log("Activating microphone...");
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -162,9 +142,10 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     targetToken: remoteFcmToken,
-                    message: `[PING] ${peerId || 'Someone'} wants to talk!`
+                    message: `${peerId || 'Someone'} wanted to talk with u`
                 }),
             });
+            showIncomingNotification(`${peerId || 'Someone'} wanted to talk with u`);
         } catch (error) {
             console.error("Ping failed", error);
         }
