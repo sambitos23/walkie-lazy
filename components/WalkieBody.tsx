@@ -233,6 +233,9 @@ export default function WalkieBody() {
                                         value={remoteToken || ''}
                                         onChange={(e) => setRemoteToken(e.target.value)}
                                         placeholder="PASTE REMOTE TOKEN HERE"
+                                        autoCapitalize="off"
+                                        autoCorrect="off"
+                                        spellCheck={false}
                                         className="w-full bg-[#1a1a1a] border border-white/10 p-3 rounded-xl text-[10px] text-white focus:border-[#ff8c00] outline-none transition-all font-mono"
                                     />
                                     {exchangeStatus === 'scanning' && (
@@ -328,7 +331,10 @@ export default function WalkieBody() {
                             placeholder="SET ID"
                             value={myId}
                             onChange={(e) => setMyId(e.target.value)}
-                            className="w-full bg-black/60 border border-[#333] p-3 rounded-lg text-xs text-white focus:border-[#ff8c00] outline-none transition-all uppercase font-mono tracking-wider"
+                            autoCapitalize="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            className="w-full bg-black/60 border border-[#333] p-3 rounded-lg text-xs text-white focus:border-[#ff8c00] outline-none transition-all font-mono tracking-wider"
                         />
                     </div>
                     <div className="flex-1">
@@ -337,7 +343,10 @@ export default function WalkieBody() {
                             placeholder="REMOTE ID"
                             value={targetId}
                             onChange={(e) => setTargetId(e.target.value)}
-                            className="w-full bg-black/60 border border-[#333] p-3 rounded-lg text-xs text-white focus:border-[#ff8c00] outline-none transition-all uppercase font-mono tracking-wider"
+                            autoCapitalize="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            className="w-full bg-black/60 border border-[#333] p-3 rounded-lg text-xs text-white focus:border-[#ff8c00] outline-none transition-all font-mono tracking-wider"
                         />
                     </div>
                 </div>
@@ -347,6 +356,9 @@ export default function WalkieBody() {
                         placeholder="PASTE REMOTE TOKEN"
                         value={targetFcmToken}
                         onChange={(e) => setTargetFcmToken(e.target.value)}
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
                         className="w-full bg-black/60 border border-[#333] p-3 rounded-lg text-[10px] text-white focus:border-[#ff8c00] outline-none transition-all font-mono"
                     />
                 </div>
