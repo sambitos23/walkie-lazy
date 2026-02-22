@@ -22,6 +22,8 @@ export default function WalkieBody() {
     const [autoExchangeEnabled, setAutoExchangeEnabled] = useState(true);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
     const [tokenError, setTokenError] = useState<string | null>(null);
+    const [showBrowserRedirect, setShowBrowserRedirect] = useState(false);
+    const [pendingRemoteToken, setPendingRemoteToken] = useState<string | null>(null);
 
     const { startTalking, stopTalking, sendPing, clearSignal, audioRef, fcmToken, setFcmToken, isIncomingCall } = useWalkieTalkie(myId, targetId, targetFcmToken);
 
@@ -73,22 +75,46 @@ export default function WalkieBody() {
     };
 
     // Read remote token from URL query parameters (for QR code scanning)
+    // Also check localStorage for tokens stored by the browser redirect
     React.useEffect(() => {
         if (typeof window === 'undefined') return;
+
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+
+        // Check URL params first
         const params = new URLSearchParams(window.location.search);
         const scannedToken = params.get('token');
+
         if (scannedToken && scannedToken.length > 20) {
-            setRemoteToken(scannedToken);
-            setTargetFcmToken(scannedToken);
-            setConnectionStatus('connecting');
-            setExchangeStatus('scanning');
-            // Clean up URL without reloading
+            // Clean up URL immediately
             window.history.replaceState({}, '', window.location.pathname);
-            setTimeout(() => {
+
+            if (isStandalone) {
+                // We're in the PWA — apply the token directly
+                setRemoteToken(scannedToken);
+                setTargetFcmToken(scannedToken);
                 setConnectionStatus('connected');
                 setExchangeStatus('success');
                 setTimeout(() => setExchangeStatus('idle'), 3000);
-            }, 1500);
+            } else {
+                // We're in the browser — store token and show redirect banner
+                localStorage.setItem('walkie_pending_remote_token', scannedToken);
+                setPendingRemoteToken(scannedToken);
+                setShowBrowserRedirect(true);
+            }
+        }
+
+        // If we're in the PWA, check for a pending token from a previous browser session
+        if (isStandalone) {
+            const pending = localStorage.getItem('walkie_pending_remote_token');
+            if (pending && pending.length > 20) {
+                localStorage.removeItem('walkie_pending_remote_token');
+                setRemoteToken(pending);
+                setTargetFcmToken(pending);
+                setConnectionStatus('connected');
+                setExchangeStatus('success');
+                setTimeout(() => setExchangeStatus('idle'), 3000);
+            }
         }
     }, []);
 
@@ -102,22 +128,13 @@ export default function WalkieBody() {
 
         try {
             setExchangeStatus('exchanging');
-            const isValid = await validateToken(remoteToken);
 
-            if (isValid) {
-                await updateToken(remoteToken);
-                setFcmToken(remoteToken);
-                setTokenValidation('valid');
-                setExchangeStatus('success');
+            // Set the remote token as the target FCM token for sending notifications
+            setTargetFcmToken(remoteToken);
+            setConnectionStatus('connected');
+            setExchangeStatus('success');
 
-                // Auto-connect if enabled
-                if (autoExchangeEnabled && targetId) {
-                    setConnectionStatus('connecting');
-                    setTimeout(() => setConnectionStatus('connected'), 1500);
-                }
-            } else {
-                setExchangeStatus('failed');
-            }
+            console.log('Token exchange successful. Remote token set as target.');
         } catch (error) {
             console.error('Token exchange failed:', error);
             setExchangeStatus('failed');
@@ -166,6 +183,73 @@ export default function WalkieBody() {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen py-10 px-4 select-none">
             <audio ref={audioRef} autoPlay playsInline className="pointer-events-none invisible absolute" />
+
+            {/* BROWSER REDIRECT BANNER — shown when QR opens in Safari instead of PWA */}
+            {showBrowserRedirect && (
+                <div className="fixed inset-0 z-[60] bg-[#0a0a0b] flex flex-col items-center justify-center px-6 text-center"
+                    style={{ paddingTop: 'env(safe-area-inset-top, 20px)', paddingBottom: 'env(safe-area-inset-bottom, 20px)' }}
+                >
+                    <div className="w-16 h-16 rounded-2xl bg-[#ff8c00]/20 flex items-center justify-center mb-6">
+                        <Zap size={32} className="text-[#ff8c00]" />
+                    </div>
+
+                    <h2 className="text-white text-2xl font-black uppercase tracking-wider mb-3">
+                        TOKEN RECEIVED!
+                    </h2>
+
+                    <p className="text-white/60 text-sm mb-8 max-w-xs leading-relaxed">
+                        The remote token has been saved. Open the <strong className="text-[#ff8c00]">Walkie-Talkie app</strong> from your Home Screen to connect.
+                    </p>
+
+                    {pendingRemoteToken && (
+                        <div className="w-full max-w-sm bg-[#111] rounded-xl border border-white/10 p-4 mb-6">
+                            <span className="text-[#ff8c00] text-[10px] font-black block mb-2">REMOTE TOKEN (SAVED)</span>
+                            <p className="text-[9px] text-green-500/80 font-mono break-all leading-relaxed">
+                                {pendingRemoteToken.substring(0, 40)}...
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="space-y-3 w-full max-w-sm">
+                        <div className="bg-[#111] rounded-xl border border-white/10 p-4 text-left">
+                            <p className="text-white/80 text-xs mb-3 font-black uppercase">How to connect:</p>
+                            <div className="space-y-2">
+                                <div className="flex items-start gap-3">
+                                    <span className="text-[#ff8c00] font-black text-xs mt-0.5">1.</span>
+                                    <p className="text-white/60 text-xs">If you haven't already, tap <strong className="text-white">Share → Add to Home Screen</strong> to install the app</p>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                    <span className="text-[#ff8c00] font-black text-xs mt-0.5">2.</span>
+                                    <p className="text-white/60 text-xs">Open <strong className="text-white">Walkie-Lazy</strong> from your Home Screen</p>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                    <span className="text-[#ff8c00] font-black text-xs mt-0.5">3.</span>
+                                    <p className="text-white/60 text-xs">The remote token will be applied automatically!</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => {
+                                if (pendingRemoteToken) {
+                                    navigator.clipboard.writeText(pendingRemoteToken).catch(() => { });
+                                }
+                                setShowBrowserRedirect(false);
+                            }}
+                            className="w-full py-4 rounded-xl text-sm font-black uppercase bg-[#ff8c00] text-black active:bg-[#ff6300] transition-all"
+                        >
+                            GOT IT — COPY TOKEN & CONTINUE
+                        </button>
+
+                        <button
+                            onClick={() => setShowBrowserRedirect(false)}
+                            className="w-full py-3 rounded-xl text-xs font-black uppercase bg-white/5 text-white/40 active:bg-white/10 transition-all"
+                        >
+                            USE IN BROWSER ANYWAY
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* TOKEN EXCHANGE OVERLAY — Mobile-first bottom sheet */}
             {isTokenExchangeActive && (
