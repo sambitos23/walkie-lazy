@@ -1,6 +1,6 @@
 import { MetadataRoute } from 'next'
 
-export default function manifest(): MetadataRoute.Manifest {
+export default function manifest(): any {
     return {
         name: 'Walkie-Lazy',
         short_name: 'Walkie Lazy',
@@ -9,6 +9,7 @@ export default function manifest(): MetadataRoute.Manifest {
         display: 'standalone',
         background_color: "#ffffff",
         theme_color: "#ffffff",
+        gcm_sender_id: "1039538000707",
         icons: [
             {
                 src: '/web-app-manifest-192x192.png',

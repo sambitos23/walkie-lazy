@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Peer, { MediaConnection } from 'peerjs';
-import { requestForToken, onMessageListener } from '@/lib/firebase';
+import { requestForToken } from '@/lib/firebase';
 
 export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmToken: string) => {
     const [peer, setPeer] = useState<Peer | null>(null);
@@ -63,19 +63,24 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
 
     const startTalking = async () => {
         // 1. Send the Push Notification via an API route
-        try {
-            await fetch('/api/notify', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    targetToken: remoteFcmToken || remotePeerId, // Prefer FCM token
-                    message: "Incoming voice from " + peerId
-                }),
-            });
-        } catch (error) {
-            console.error("Push notification failed", error);
+        // ONLY if we have a valid-looking FCM token
+        if (remoteFcmToken && remoteFcmToken.length > 50) {
+            try {
+                await fetch('/api/notify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        targetToken: remoteFcmToken,
+                        message: "Incoming voice from " + peerId
+                    }),
+                });
+            } catch (error) {
+                console.error("Push notification failed", error);
+            }
+        } else {
+            console.warn("Skipping push notification: Remote FCM token is missing or invalid.");
         }
 
         // 2. Trigger the actual WebRTC Audio
@@ -99,12 +104,16 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
     };
 
     const sendPing = async () => {
+        if (!remoteFcmToken || remoteFcmToken.length < 50) {
+            console.error("Cannot ping: valid FCM token required.");
+            return;
+        }
         try {
             await fetch('/api/notify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    targetToken: remoteFcmToken || remotePeerId,
+                    targetToken: remoteFcmToken,
                     message: `[PING] ${peerId} wants to talk!`
                 }),
             });
@@ -127,7 +136,6 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
             callRef.current.close();
             callRef.current = null;
         }
-        // Force cleanup of the audio element on the caller side too if needed
         if (audioRef.current) {
             audioRef.current.srcObject = null;
         }

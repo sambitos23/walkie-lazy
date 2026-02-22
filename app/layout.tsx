@@ -24,12 +24,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <meta name="apple-mobile-web-app-title" content="Walkie Lazy" />
+      <head>
+        <meta name="apple-mobile-web-app-title" content="Walkie Lazy" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
       </body>
     </html>
+
   );
 }

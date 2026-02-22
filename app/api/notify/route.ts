@@ -48,6 +48,10 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'targetToken is required' }, { status: 400 });
         }
 
+        if (targetToken.length < 50) {
+            return NextResponse.json({ error: 'Invalid targetToken format' }, { status: 400 });
+        }
+
         const firebaseAdmin = getFirebaseAdmin();
         if (!firebaseAdmin) {
             return NextResponse.json({
