@@ -167,162 +167,153 @@ export default function WalkieBody() {
         <div className="flex flex-col items-center justify-center min-h-screen py-10 px-4 select-none">
             <audio ref={audioRef} autoPlay playsInline className="pointer-events-none invisible absolute" />
 
-            {/* TOKEN EXCHANGE OVERLAY */}
+            {/* TOKEN EXCHANGE OVERLAY — Mobile-first bottom sheet */}
             {isTokenExchangeActive && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-lg flex items-center justify-center z-50">
-                    <div className="bg-[#111] rounded-2xl p-6 w-full max-w-2xl border border-white/5">
-                        <div className="flex justify-between items-start mb-4">
-                            <h3 className="text-white text-xl font-black uppercase tracking-wider">TOKEN EXCHANGE</h3>
-                            <button
-                                onClick={() => setIsTokenExchangeActive(false)}
-                                className="text-[#ff8c00] hover:text-white transition-colors"
-                            >
-                                <X size={24} />
-                            </button>
+                <div className="fixed inset-0 z-50 flex flex-col">
+                    {/* Backdrop — tap to close */}
+                    <div
+                        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                        onClick={() => setIsTokenExchangeActive(false)}
+                    />
+
+                    {/* Sheet container */}
+                    <div className="relative mt-auto w-full max-w-lg mx-auto max-h-[90dvh] flex flex-col bg-[#111] rounded-t-3xl border-t border-x border-white/10 shadow-2xl animate-[slideUp_0.3s_ease-out]"
+                        style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
+                    >
+                        {/* Drag handle + sticky header */}
+                        <div className="sticky top-0 z-10 bg-[#111] rounded-t-3xl px-5 pt-3 pb-4 border-b border-white/5">
+                            <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-white text-lg font-black uppercase tracking-wider">TOKEN EXCHANGE</h3>
+                                <button
+                                    onClick={() => setIsTokenExchangeActive(false)}
+                                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 active:bg-white/20 transition-colors"
+                                >
+                                    <X size={18} className="text-white" />
+                                </button>
+                            </div>
                         </div>
 
-                        <div className="space-y-6">
+                        {/* Scrollable content */}
+                        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-4">
                             {/* MY TOKEN */}
-                            <div className="bg-[#0a0a0b] p-4 rounded-lg border border-white/5">
-                                <h4 className="text-[#ff8c00] font-black mb-2">MY TOKEN</h4>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex-1">
-                                        <p className={`text-[10px] font-mono break-all p-3 rounded ${tokenError ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-[#222] text-white/80'}`}>
-                                            {fcmToken || tokenError || (exchangeStatus === 'exchanging' ? 'SYNCING...' : 'GENERATING... (CLICK SYNC)')}
-                                        </p>
-                                    </div>
-                                    <button
-                                        onClick={handleCopyToken}
-                                        className={`px-3 py-1 rounded-lg text-xs font-black uppercase transition-all ${exchangeStatus === 'success'
-                                            ? 'bg-green-500 text-black'
-                                            : 'bg-[#ff8c00] text-black hover:bg-[#ff6300]'
-                                            }`}
-                                    >
-                                        {exchangeStatus === 'success' ? 'COPIED!' : 'COPY'}
-                                    </button>
-                                </div>
-                                <div className="mt-3 flex gap-2">
+                            <div className="bg-[#0a0a0b] p-4 rounded-xl border border-white/5">
+                                <h4 className="text-[#ff8c00] font-black text-xs mb-2">MY TOKEN</h4>
+                                <p className={`text-[10px] font-mono break-all p-3 rounded-lg mb-3 ${tokenError ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-[#1a1a1a] text-white/80'}`}>
+                                    {fcmToken || tokenError || (exchangeStatus === 'exchanging' ? 'SYNCING...' : 'TAP REFRESH TO GENERATE')}
+                                </p>
+                                <div className="flex gap-2">
                                     <button
                                         onClick={handleSync}
-                                        className={`flex-1 px-3 py-2 rounded-lg text-xs font-black uppercase transition-all ${exchangeStatus === 'exchanging'
-                                            ? 'bg-[#666] cursor-not-allowed'
-                                            : 'bg-[#ff8c00] text-black hover:bg-[#ff6300]'
+                                        className={`flex-1 px-3 py-3 rounded-xl text-xs font-black uppercase transition-all ${exchangeStatus === 'exchanging'
+                                            ? 'bg-[#444] text-white/40 cursor-not-allowed'
+                                            : 'bg-[#ff8c00] text-black active:bg-[#ff6300]'
                                             }`}
                                         disabled={exchangeStatus === 'exchanging'}
                                     >
                                         {exchangeStatus === 'exchanging' ? 'GENERATING...' : 'REFRESH TOKEN'}
                                     </button>
                                     <button
-                                        onClick={handleDisconnect}
-                                        className="flex-1 px-3 py-2 rounded-lg text-xs font-black uppercase bg-[#ff4444] text-black hover:bg-[#ff2222]"
+                                        onClick={handleCopyToken}
+                                        className={`px-4 py-3 rounded-xl text-xs font-black uppercase transition-all ${exchangeStatus === 'success'
+                                            ? 'bg-green-500 text-black'
+                                            : 'bg-white/10 text-white active:bg-white/20'
+                                            }`}
                                     >
-                                        DISCONNECT
+                                        {exchangeStatus === 'success' ? '✓' : 'COPY'}
                                     </button>
                                 </div>
                             </div>
 
                             {/* REMOTE TOKEN */}
-                            <div className="bg-[#0a0a0b] p-4 rounded-lg border border-white/5">
-                                <h4 className="text-[#ff8c00] font-black mb-2">REMOTE TOKEN</h4>
-                                <div className="space-y-3">
-                                    <div className="relative">
-                                        <input
-                                            value={remoteToken || ''}
-                                            onChange={(e) => setRemoteToken(e.target.value)}
-                                            placeholder="PASTE REMOTE TOKEN"
-                                            className="w-full bg-black/60 border border-[#333] p-3 rounded-lg text-[10px] text-white focus:border-[#ff8c00] outline-none transition-all font-mono"
-                                        />
-                                        {exchangeStatus === 'scanning' && (
-                                            <div className="absolute top-0 right-0 h-full flex items-center px-3 text-[#ff8c00]">
-                                                <Loader2 size={20} className="animate-spin" />
-                                            </div>
-                                        )}
-                                    </div>
-                                    <button
-                                        onClick={handleTokenExchange}
-                                        className={`w-full px-3 py-2 rounded-lg text-xs font-black uppercase transition-all ${exchangeStatus === 'exchanging'
-                                            ? 'bg-[#666] cursor-not-allowed'
-                                            : 'bg-[#ff8c00] text-black hover:bg-[#ff6300]'
-                                            }`}
-                                        disabled={exchangeStatus === 'exchanging'}
-                                    >
-                                        {exchangeStatus === 'exchanging' ? 'EXCHANGING...' : 'EXCHANGE TOKEN'}
-                                    </button>
+                            <div className="bg-[#0a0a0b] p-4 rounded-xl border border-white/5">
+                                <h4 className="text-[#ff8c00] font-black text-xs mb-2">REMOTE TOKEN</h4>
+                                <div className="relative mb-3">
+                                    <input
+                                        value={remoteToken || ''}
+                                        onChange={(e) => setRemoteToken(e.target.value)}
+                                        placeholder="PASTE REMOTE TOKEN HERE"
+                                        className="w-full bg-[#1a1a1a] border border-white/10 p-3 rounded-xl text-[10px] text-white focus:border-[#ff8c00] outline-none transition-all font-mono"
+                                    />
+                                    {exchangeStatus === 'scanning' && (
+                                        <div className="absolute top-0 right-0 h-full flex items-center px-3 text-[#ff8c00]">
+                                            <Loader2 size={18} className="animate-spin" />
+                                        </div>
+                                    )}
                                 </div>
+                                <button
+                                    onClick={handleTokenExchange}
+                                    className={`w-full px-3 py-3 rounded-xl text-xs font-black uppercase transition-all ${exchangeStatus === 'exchanging'
+                                        ? 'bg-[#444] text-white/40 cursor-not-allowed'
+                                        : 'bg-[#ff8c00] text-black active:bg-[#ff6300]'
+                                        }`}
+                                    disabled={exchangeStatus === 'exchanging'}
+                                >
+                                    {exchangeStatus === 'exchanging' ? 'EXCHANGING...' : 'EXCHANGE TOKEN'}
+                                </button>
                             </div>
 
-                            {/* QR CODE FOR TOKEN EXCHANGE */}
-                            <div className="bg-[#0a0a0b] p-4 rounded-lg border border-white/5">
-                                <h4 className="text-[#ff8c00] font-black mb-2">SCAN QR CODE</h4>
+                            {/* QR CODE */}
+                            <div className="bg-[#0a0a0b] p-4 rounded-xl border border-white/5">
+                                <h4 className="text-[#ff8c00] font-black text-xs mb-2">QR CODE</h4>
                                 <div className="text-center">
                                     {fcmToken ? (
                                         <>
                                             <QrCode
                                                 value={`${typeof window !== 'undefined' ? window.location.origin : 'https://walkie-lazy.vercel.app'}/?token=${encodeURIComponent(fcmToken)}`}
-                                                size={200}
-                                                bgColor="#111"
+                                                size={180}
+                                                bgColor="#0a0a0b"
                                                 fgColor="#ff8c00"
                                                 level="L"
-                                                className="mx-auto mb-3"
+                                                className="mx-auto mb-2"
                                             />
                                             <p className="text-[9px] text-green-500 font-mono">
-                                                ✅ SCAN THIS ON ANOTHER DEVICE TO CONNECT
+                                                ✅ SCAN ON ANOTHER DEVICE TO CONNECT
                                             </p>
                                         </>
                                     ) : (
-                                        <>
-                                            <div className="w-[200px] h-[200px] mx-auto mb-3 bg-[#222] rounded-lg flex items-center justify-center border border-white/10">
-                                                <p className="text-white/30 text-xs font-black uppercase">NO TOKEN YET</p>
-                                            </div>
-                                            <p className="text-[9px] text-red-500 font-mono">
-                                                ❌ GENERATE TOKEN FIRST (CLICK REFRESH TOKEN)
-                                            </p>
-                                        </>
+                                        <div className="w-[180px] h-[180px] mx-auto mb-2 bg-[#1a1a1a] rounded-xl flex items-center justify-center border border-white/5">
+                                            <p className="text-white/20 text-[10px] font-black uppercase">GENERATE TOKEN FIRST</p>
+                                        </div>
                                     )}
                                 </div>
                             </div>
 
-                            {/* CONNECTION STATUS */}
-                            <div className="bg-[#0a0a0b] p-4 rounded-lg border border-white/5">
-                                <h4 className="text-[#ff8c00] font-black mb-2">CONNECTION STATUS</h4>
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] text-white/80">STATUS</span>
-                                        <div className="flex items-center gap-2">
-                                            {connectionStatus === 'disconnected' && (
-                                                <div className="w-3 h-3 bg-[#ff4444] rounded-full animate-pulse" />
-                                            )}
-                                            {connectionStatus === 'connecting' && (
-                                                <div className="w-3 h-3 bg-[#ff8c00] rounded-full animate-bounce" />
-                                            )}
-                                            {connectionStatus === 'connected' && (
-                                                <div className="w-3 h-3 bg-green-500 rounded-full" />
-                                            )}
-                                            <span className={`text-[10px] ${connectionStatus === 'connected' ? 'text-green-500' : 'text-white/60'}`}>
-                                                {connectionStatus.toUpperCase()}
-                                            </span>
-                                        </div>
+                            {/* CONNECTION STATUS — compact */}
+                            <div className="bg-[#0a0a0b] p-4 rounded-xl border border-white/5">
+                                <h4 className="text-[#ff8c00] font-black text-xs mb-2">STATUS</h4>
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className={`w-2.5 h-2.5 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500' :
+                                            connectionStatus === 'connecting' ? 'bg-[#ff8c00] animate-pulse' :
+                                                'bg-red-500'
+                                            }`} />
+                                        <span className="text-[10px] text-white/60 font-mono">{connectionStatus.toUpperCase()}</span>
                                     </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] text-white/80">TOKEN VALID</span>
-                                        <span className={`text-[10px] ${tokenValidation === 'valid' ? 'text-green-500' : tokenValidation === 'invalid' ? 'text-[#ff4444]' : 'text-white/60'}`}>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] text-white/40">TOKEN:</span>
+                                        <span className={`text-[10px] font-black ${tokenValidation === 'valid' ? 'text-green-500' : tokenValidation === 'invalid' ? 'text-red-500' : 'text-white/40'}`}>
                                             {tokenValidation.toUpperCase()}
                                         </span>
                                     </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] text-white/80">AUTO-EXCHANGE</span>
-                                        <button
-                                            onClick={() => setAutoExchangeEnabled(!autoExchangeEnabled)}
-                                            className={`px-2 py-1 rounded text-[10px] font-black uppercase transition-all ${autoExchangeEnabled
-                                                ? 'bg-green-500 text-black hover:bg-green-400'
-                                                : 'bg-[#666] text-white/60 hover:bg-[#444]'
-                                                }`}
-                                        >
-                                            {autoExchangeEnabled ? 'ON' : 'OFF'}
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Sticky bottom actions */}
+                        <div className="sticky bottom-0 bg-[#111] border-t border-white/5 px-5 pt-3 pb-4 flex gap-3">
+                            <button
+                                onClick={handleDisconnect}
+                                className="flex-1 px-3 py-3.5 rounded-xl text-xs font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20 active:bg-red-500/20 transition-all"
+                            >
+                                DISCONNECT
+                            </button>
+                            <button
+                                onClick={() => setIsTokenExchangeActive(false)}
+                                className="flex-1 px-3 py-3.5 rounded-xl text-xs font-black uppercase bg-white/10 text-white active:bg-white/20 transition-all"
+                            >
+                                CLOSE
+                            </button>
                         </div>
                     </div>
                 </div>
