@@ -12,9 +12,6 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
     const callRef = useRef<MediaConnection | null>(null);
 
     useEffect(() => {
-        // Request token on mount
-        requestForToken().then(setFcmToken);
-
         // Listen for foreground messages (Continuous)
         let unsubscribe: (() => void) | undefined;
         const setupMessaging = async () => {

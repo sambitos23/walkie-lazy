@@ -140,7 +140,7 @@ export const requestForToken = async (): Promise<string | null> => {
 
             const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
             if (!vapidKey) {
-                console.error("VAPID Key missing from environment variables!");
+                console.error("❌ VAPID Key missing! Please check your Vercel/Local environment variables for NEXT_PUBLIC_FIREBASE_VAPID_KEY");
                 return null;
             }
 

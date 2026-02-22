@@ -21,6 +21,7 @@ export default function WalkieBody() {
     const [tokenValidation, setTokenValidation] = useState<'valid' | 'invalid' | 'unknown'>('unknown');
     const [autoExchangeEnabled, setAutoExchangeEnabled] = useState(true);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+    const [tokenError, setTokenError] = useState<string | null>(null);
 
     const { startTalking, stopTalking, sendPing, clearSignal, audioRef, fcmToken, setFcmToken, isIncomingCall } = useWalkieTalkie(myId, targetId, targetFcmToken);
 
@@ -40,6 +41,8 @@ export default function WalkieBody() {
 
     const handleSync = async () => {
         try {
+            setTokenError(null);
+            setExchangeStatus('exchanging');
             const token = await requestForToken();
             if (token) {
                 setFcmToken(token);
@@ -47,9 +50,14 @@ export default function WalkieBody() {
                 saveTokenToStorage(token);
                 setExchangeStatus('success');
                 setTimeout(() => setExchangeStatus('idle'), 3000);
+            } else {
+                setTokenError('NOT SUPPORTED IN PRIVATE MODE');
+                setExchangeStatus('failed');
+                setTimeout(() => setExchangeStatus('idle'), 3000);
             }
         } catch (e) {
             console.error("Sync failed", e);
+            setTokenError('INITIALIZATION_FAILED');
             setExchangeStatus('failed');
             setTimeout(() => setExchangeStatus('idle'), 3000);
         }
@@ -150,8 +158,8 @@ export default function WalkieBody() {
                                 <h4 className="text-[#ff8c00] font-black mb-2">MY TOKEN</h4>
                                 <div className="flex items-center gap-3">
                                     <div className="flex-1">
-                                        <p className="text-[10px] text-white/80 font-mono break-all bg-[#222] p-3 rounded">
-                                            {fcmToken || 'GENERATING...'}
+                                        <p className={`text-[10px] font-mono break-all p-3 rounded ${tokenError ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-[#222] text-white/80'}`}>
+                                            {fcmToken || tokenError || (exchangeStatus === 'exchanging' ? 'SYNCING...' : 'GENERATING... (CLICK SYNC)')}
                                         </p>
                                     </div>
                                     <button
@@ -383,7 +391,7 @@ export default function WalkieBody() {
                         </div>
                     </div>
                     <div className="flex flex-col items-center gap-1 mb-1">
-                        <span className="tactical-label text-[6px]!">MODE</span>
+                        <span className="tactical-label text-[6px]! text-[#ff8c00]! animate-pulse">MODE (SYNC)</span>
                         <div
                             className="tactical-toggle cursor-pointer hover:brightness-125 transition-all active:scale-95"
                             onClick={handleSync}

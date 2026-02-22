@@ -744,8 +744,8 @@ export const useConnectionManager = (
   useEffect(() => {
     isMountedRef.current = true;
 
-    // Initialize token first
-    initializeToken();
+    // Initialize token first (Disabled auto-sync for Safari compatibility)
+    // initializeToken();
 
     // Set up network connectivity listeners
     eventListenersRef.current.online = handleOnlineStatusChange;
