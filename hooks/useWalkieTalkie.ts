@@ -37,18 +37,18 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
 
     // Clean up any existing outgoing call + mic
     const cleanupOutgoing = useCallback(() => {
+        isTalkingRef.current = false; // Always force to false
         if (streamRef.current) {
             streamRef.current.getTracks().forEach(track => {
                 track.enabled = false;
-                track.stop();
             });
-            streamRef.current = null;
+            // We do NOT set streamRef.current to null or call track.stop(),
+            // so the persistent mic stream stays alive for the next PTT press.
         }
         if (callRef.current) {
             try { callRef.current.close(); } catch (e) { /* ignore */ }
             callRef.current = null;
         }
-        isTalkingRef.current = false;
     }, []);
 
     // Clean up any existing incoming call
@@ -109,8 +109,39 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
             call.answer(); // Answer without sending our mic back
             incomingCallRef.current = call;
 
+            // Failsafe for PeerJS close bug
+            const checkClose = () => {
+                console.log("Connection closed/failed on incoming stream");
+                if (incomingCallRef.current === call) {
+                    cleanupIncoming();
+                }
+            };
+
+            if (call.peerConnection) {
+                call.peerConnection.onconnectionstatechange = () => {
+                    const state = call.peerConnection.connectionState;
+                    if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+                        checkClose();
+                    }
+                };
+            }
+
             call.on('stream', (remoteStream) => {
                 console.log("Playing incoming audio. Tracks:", remoteStream.getAudioTracks().length);
+
+                // Track lifecycle failsafes
+                remoteStream.getAudioTracks().forEach(track => {
+                    track.onended = () => {
+                        console.log("Remote track ended.");
+                        checkClose();
+                    };
+                    // Optional: If muted by remote, we might want to clean up depending on browser behavior
+                    track.onmute = () => {
+                        console.log("Remote track muted.");
+                        checkClose();
+                    };
+                });
+
                 if (audioRef.current) {
                     audioRef.current.srcObject = remoteStream;
                     audioRef.current.play().catch(e => {
@@ -120,17 +151,20 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
             });
 
             call.on('close', () => {
-                console.log("Incoming call closed.");
-                if (incomingCallRef.current === call) {
-                    incomingCallRef.current = null;
-                    setIsIncomingCall(false);
-                    if (audioRef.current) {
-                        audioRef.current.pause();
-                        audioRef.current.srcObject = null;
-                    }
-                }
+                console.log("Incoming call closed normally via PeerJS event.");
+                checkClose();
             });
         });
+
+        // Get a persistent mic stream on mount, but keep it disabled
+        navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+            .then(stream => {
+                stream.getAudioTracks().forEach(track => { track.enabled = false; });
+                streamRef.current = stream;
+            })
+            .catch(err => {
+                console.error("Initial mic setup failed:", err);
+            });
 
         setPeer(newPeer);
         return () => {
@@ -140,6 +174,10 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
             newPeer.destroy();
             setPeer(null);
             setPeerConnected(false);
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+                streamRef.current = null;
+            }
         }
     }, [peerId, cleanupOutgoing, cleanupIncoming]);
 
@@ -153,16 +191,33 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
             return;
         }
 
-        // Clean up any previous outgoing call
+        // Clean up any previous outgoing call just in case
         cleanupOutgoing();
+        isTalkingRef.current = true;
 
         try {
-            console.log("Mic ON — transmitting to", remotePeerId);
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            streamRef.current = stream;
-            isTalkingRef.current = true;
+            console.log("Mic ON — enabling track...");
 
-            const call = peer.call(remotePeerId, stream);
+            if (!streamRef.current) {
+                // If the stream wasn't acquired on mount (e.g., initial block), try again
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                streamRef.current = stream;
+            }
+
+            // Guard: Did the user release PTT while waiting?
+            if (!isTalkingRef.current) {
+                console.warn("PTT released before mic was ready.");
+                if (streamRef.current) {
+                    streamRef.current.getAudioTracks().forEach(track => track.enabled = false);
+                }
+                return;
+            }
+
+            // Enable the track!
+            streamRef.current.getAudioTracks().forEach(track => track.enabled = true);
+
+            console.log("Transmitting to", remotePeerId);
+            const call = peer.call(remotePeerId, streamRef.current);
             callRef.current = call;
 
             // When the remote side closes, clean up our side too
@@ -180,9 +235,6 @@ export const useWalkieTalkie = (peerId: string, remotePeerId: string, remoteFcmT
     };
 
     const stopTalking = () => {
-        if (!isTalkingRef.current && !streamRef.current && !callRef.current) {
-            return; // Nothing to stop
-        }
         console.log("Mic OFF — stopping transmission.");
         cleanupOutgoing();
     };
